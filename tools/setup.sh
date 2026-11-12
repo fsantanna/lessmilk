@@ -2,7 +2,8 @@
 # Fetches and builds, in ext/ (ignored by git), what the port needs:
 #
 #   ext/originals     a copy of lessmilk.com (leokaplan/lessmilk): the original
-#                     games in www.lessmilk.com/games/<n>/, and Phaser 1.1.3
+#                     games in www.lessmilk.com/games/<n>/, with the assets of
+#                     assets/<n>/ copied next to them, and Phaser
 #   ext/student       the first port to Atmos (jessicacoliveira/atmos-lessmilk)
 #   ext/ceu-atmos     the Atmos compiler (branch main): ext/ceu-atmos/atmos
 #
@@ -28,5 +29,11 @@ clone jessicacoliveira/atmos-lessmilk student   $STUDENT_REV
 clone fsantanna/ceu-atmos            ceu-atmos
 
 make -s -C ext/ceu-atmos >/dev/null
+
+# the originals load their assets from next to them: the copy of the site
+# has them only for games 1 and 2
+for n in $(seq 1 12); do
+    cp -r assets/$n/. ext/originals/www.lessmilk.com/games/$n/
+done
 
 echo "setup: ok"

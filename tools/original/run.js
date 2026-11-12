@@ -7,8 +7,10 @@
 // before frame f, the first frame being 1), and SHOTS ("f f ...", saved as
 // <outdir>/<f>.png at the end of frame f).
 //
-// Frame 1 is the first frame after the assets are loaded: while they load,
-// frames run with the clock stopped and are not counted.
+// While the states Boot and Load run (all twelve games have them), frames
+// run with the clock stopped at T0 and are not counted. Frame 1 is the first
+// frame in the next state, at T0; frame f is at T0 + (f-1) * 1000/60 ms.
+// So no input can be given at frame 1.
 //
 // The trace goes to stdout, a line per frame: the frame, the state of
 // Phaser, and what tools/original/trace/<n>.js adds for that game.
@@ -81,33 +83,40 @@ ${tags.join('\n')}
     });
     const ctx = await browser.newContext({ viewport: { width: 800, height: 700 } });
     const pg  = await ctx.newPage();
+    pg.on('requestfailed', r => console.error('missing:', r.url()));
     pg.on('pageerror', e => console.error('page error:', e.message));
     pg.on('console', m => { if (m.type() === 'error') console.error('console:', m.text()); });
     await pg.addInitScript(p => { window.__params = p; }, { seed: run.seed });
     await pg.goto('file://' + page);
 
-    // loading: frames with the clock stopped, until the loader is done
+    // loading: frames with the clock stopped at T0, until a frame runs in
+    // a state after Boot and Load; that frame is frame 1
     const ready = () => pg.evaluate(() => {
         const g = window.Phaser && Phaser.GAMES && Phaser.GAMES[0];
-        if (!g || !g.isBooted || !g.load || !g.state.current) return false;
-        return !g.load.isLoading && g.load.hasLoaded !== false;
+        if (!g || !g.isBooted || !g.state.current) return false;
+        return !/^(Boot|Load)$/.test(g.state.current) && !g.load.isLoading;
     });
     let waited = 0;
-    while (!(await ready())) {
+    while (true) {
         await pg.evaluate(() => window.__step(false));
-        await pg.waitForTimeout(10);
-        if (++waited > 1000) throw new Error('run: the game did not load');
+        if (await ready()) break;
+        await pg.waitForTimeout(5);
+        if (++waited > 2000) throw new Error('run: the game did not load');
     }
     console.error(`run: loaded after ${waited} frames`);
+    if (run.input[1]) throw new Error('run: no input at frame 1, which runs while loading');
+    await pg.evaluate(() => { window.__frame = 1; });
 
     for (let f = 1; f <= run.frames; f++) {
         const line = await pg.evaluate(([f, ops]) => {
-            for (const op of ops) window.__input(op);
-            window.__step(true);
+            if (f > 1) {
+                for (const op of ops) window.__input(op);
+                window.__step(true);
+            }
             const g = Phaser.GAMES[0];
             const st = g.state.current;
             const extra = window.__trace ? window.__trace(g, f) : '';
-            return f + ' ' + st + (extra ? ' ' + extra : '');
+            return f + ' ' + st + (extra !== '' && extra !== undefined ? ' ' + extra : '');
         }, [f, run.input[f] || []]);
         console.log(line);
         if (run.shots.has(f)) {

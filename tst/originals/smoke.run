@@ -1,0 +1,6 @@
+# A smoke run for every original: the mouse, SPACE, UP, and RIGHT, at fixed
+# frames. It checks the harness: the same seed and input give the same trace.
+FRAMES=300
+SEED=3
+INPUT=20:mv:150:150,30:md:0,32:mu:0,40:dn:SPACE,42:up:SPACE,60:dn:UP,64:up:UP,80:dn:RIGHT,120:up:RIGHT,130:mv:200:120,140:md:0,142:mu:0,150:dn:SPACE,152:up:SPACE,200:dn:UP,230:up:UP
+SHOTS=""
