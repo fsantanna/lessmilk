@@ -29,6 +29,110 @@ static double eng_random (void) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// PHASER'S GENERATOR: game.rnd, Phaser.RandomDataGenerator of 1.1.3, in the
+// arithmetic of JavaScript (ToInt32, ToUint32, Number.prototype.toString)
+///////////////////////////////////////////////////////////////////////////////
+
+static uint32_t js_touint32 (double x) {
+    if (!isfinite(x)) return 0;
+    double m = fmod(trunc(x), 4294967296.0);
+    if (m < 0) m += 4294967296.0;
+    return (uint32_t)m;
+}
+
+static int32_t js_toint32 (double x) {
+    return (int32_t)js_touint32(x);
+}
+
+// Number.prototype.toString(): the shortest digits that read back as x
+static void js_tostring (double x, char* out) {
+    if (x == 0) { strcpy(out, "0"); return; }
+    if (isnan(x)) { strcpy(out, "NaN"); return; }
+    char* o = out;
+    if (x < 0) { *o++ = '-'; x = -x; }
+    if (isinf(x)) { strcpy(o, "Infinity"); return; }
+    char buf[64];
+    int p;
+    for (p=1; p<=17; p++) {
+        snprintf(buf, sizeof(buf), "%.*e", p-1, x);
+        if (strtod(buf, NULL) == x) break;
+    }
+    // buf: d.ddde[+-]XX
+    char digits[32]; int k = 0;
+    char* e = strchr(buf, 'e');
+    for (char* c=buf; c<e; c++) if (*c != '.') digits[k++] = *c;
+    while (k > 1 && digits[k-1] == '0') k--;
+    digits[k] = '\0';
+    int n = atoi(e+1) + 1;
+    if (k <= n && n <= 21) {
+        o += sprintf(o, "%s", digits);
+        for (int i=0; i<n-k; i++) *o++ = '0';
+        *o = '\0';
+    } else if (0 < n && n <= 21) {
+        memcpy(o, digits, n); o += n; *o++ = '.';
+        strcpy(o, digits+n);
+    } else if (-6 < n && n <= 0) {
+        *o++ = '0'; *o++ = '.';
+        for (int i=0; i<-n; i++) *o++ = '0';
+        strcpy(o, digits);
+    } else {
+        *o++ = digits[0];
+        if (k > 1) { *o++ = '.'; memcpy(o, digits+1, k-1); o += k-1; }
+        sprintf(o, "e%c%d", (n-1 >= 0) ? '+' : '-', abs(n-1));
+    }
+}
+
+static double rdg_c = 1, rdg_s0 = 0, rdg_s1 = 0, rdg_s2 = 0;
+
+static double rdg_hash_s (const char* data) {
+    double n = 0xefc8249d, h;
+    for (const char* c=data; *c; c++) {
+        n += (unsigned char)*c;
+        h = 0.02519603282416938 * n;
+        n = js_touint32(h);
+        h -= n;
+        h *= n;
+        n = js_touint32(h);
+        h -= n;
+        n += h * 0x100000000;
+    }
+    return js_touint32(n) * 2.3283064365386963e-10;
+}
+
+static double rdg_hash_n (double x) {
+    char buf[64];
+    js_tostring(x, buf);
+    return rdg_hash_s(buf);
+}
+
+static void rdg_sow (const char* seed) {
+    rdg_s0 = rdg_hash_s(" ");
+    rdg_s1 = rdg_hash_n(rdg_s0);
+    rdg_s2 = rdg_hash_n(rdg_s1);
+    rdg_c = 1;
+    if (seed != NULL && *seed) {
+        rdg_s0 -= rdg_hash_s(seed); rdg_s0 += (rdg_s0 < 0);
+        rdg_s1 -= rdg_hash_s(seed); rdg_s1 += (rdg_s1 < 0);
+        rdg_s2 -= rdg_hash_s(seed); rdg_s2 += (rdg_s2 < 0);
+    }
+}
+
+static double rdg_rnd (void) {
+    double t = 2091639 * rdg_s0 + rdg_c * 2.3283064365386963e-10;
+    rdg_c = js_toint32(t);
+    rdg_s0 = rdg_s1;
+    rdg_s1 = rdg_s2;
+    rdg_s2 = t - rdg_c;
+    return rdg_s2;
+}
+
+static double rdg_frac (void) {
+    double a = rdg_rnd();
+    double b = rdg_rnd();
+    return a + js_toint32(b * 0x200000) * 1.1102230246251565e-16;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // FONTS: one per path and size
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -132,6 +236,26 @@ val eng = [
     ;; eng.random(): a number in [0,1), as Math.random in the originals
     random = func () {
         `:number.float eng_random()`
+    },
+
+    ;; eng.rnd_*: game.rnd of Phaser 1.1.3 (Phaser.RandomDataGenerator),
+    ;; which Phaser seeds when it boots (lib/game.atm)
+    rnd_sow = func (seed) {
+        `rdg_sow(rl_s($seed));`
+    },
+    rnd_frac = func () {
+        `:number.float rdg_frac()`
+    },
+    rnd_real_in_range = func (min, max) {
+        (`:number.float rdg_frac()` * (max - min)) + min
+    },
+    rnd_integer_in_range = func (min, max) {
+        math.floor((`:number.float rdg_frac()` * (max - min)) + min)
+    },
+
+    ;; eng.tostring(x): a number as JavaScript writes it
+    tostring = func (x) {
+        `:string ({ static char b[64]; js_tostring(a_dbl($x), b); b; })`
     },
 
     ;; eng.rand(n): an integer in [0,n), as `Math.floor(Math.random() * n)`
