@@ -102,6 +102,14 @@ static Font* eng_font (const char* path, int size) {
     return &eng_fonts[eng_nfonts++].font;
 }
 
+// The height of a line of text, as Pixi measures it in the browser (a div
+// with an "M"): the ascent, descent, and gap of Liberation Sans (1854, 434,
+// and 67 of 2048 units), each rounded, as Chromium does. Measured in the
+// container for 18 sizes from 10 to 80 px: the same.
+static double eng_line_height (int size) {
+    return round(size * 1854.0/2048) + round(size * 434.0/2048) + round(size * 67.0/2048);
+}
+
 // The text, line by line, each line aligned in the box of the widest one
 // (align: 0 left, 0.5 center, 1 right), and the box with its anchor (ax,ay)
 // at (x,y). Returns the width of the box, and draws only if "draw".
@@ -129,7 +137,8 @@ static double eng_text (const char* path, int size, const char* s,
         double lw = MeasureTextEx(*f, lines[i], (float)size, 0).x;
         if (lw > w) w = lw;
     }
-    double lh = size;
+    double lh = eng_line_height(size);
+    w = (int)w;                 // the width of the canvas of a text in Pixi
     double h = lh * n;
     if (draw) {
         c.a = (unsigned char)(c.a * (alpha <= 0 ? 0 : alpha >= 1 ? 1 : alpha));

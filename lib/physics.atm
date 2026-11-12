@@ -1,0 +1,203 @@
+;; Physics: what the games use of the arcade physics of Phaser 1.1.3, read
+;; from its source (ext/phaser/1.1.3/src/physics/arcade/).
+;;
+;; A body belongs to a sprite. It has a box of the size of a frame, placed by
+;; the anchor of the sprite, a velocity, and the bounds of the world:
+;;
+;;      val b = Body(spr)                   ;; registers it in Physics.bodies
+;;      set b.vx = -300                     ;; px/s, as body.velocity.x
+;;      set b.world = true                  ;; collideWorldBounds
+;;
+;; Each frame of Phaser runs, in this order (lib/game.atm drives it):
+;;
+;;      physics_pre()   preUpdate: each body takes the position of its sprite
+;;                      as drawn in the last frame (a 32-bit float, as in the
+;;                      transform of Pixi), moves by its velocity, and stays
+;;                      in the world
+;;      ...             the update of the game, which may test overlaps
+;;      physics_post()  postUpdate: each sprite moves by what its body moved
+;;      physics_draw()  the position drawn, for the next preUpdate
+;;
+;; Out of bounds: `in_world(spr)` tests the bounds of the sprite as drawn in
+;; the last frame, rotated, against the world, as Sprite.updateBounds does.
+
+```:prelude
+// Phaser.Math.wrapAngle
+static double phs_wrap_angle (double a) {
+    double r = fmod(a - (-180), 360);   // JavaScript % is fmod
+    if (r < 0) r += 360;
+    return r + (-180);
+}
+
+// The bounds of a sprite, as Phaser 1.1.3 computes them in
+// Sprite.updateCache and Sprite.updateBounds, from the world transform of
+// Pixi, which is a Float32Array: x y of the last frame drawn, its angle in
+// degrees, its scale, the size of its frame, and its anchor.
+// Out: left top right bottom.
+static void phs_bounds (double x, double y, double angle, double sx, double sy,
+                        double fw, double fh, double ax, double ay, double* out) {
+    double rot = phs_wrap_angle(angle) * (M_PI / 180);
+    double sr = sin(rot), cr = cos(rot);
+    float l0 = (float)(cr * sx), l1 = (float)(-sr * sy);
+    float l3 = (float)(sr * sx), l4 = (float)(cr * sy);
+    float w0 = (float)(1.0*l0 + 0.0*l3), w1 = (float)(1.0*l1 + 0.0*l4);
+    float w3 = (float)(0.0*l0 + 1.0*l3), w4 = (float)(0.0*l1 + 1.0*l4);
+    float w2 = (float)x, w5 = (float)y;
+    double a00 = w0, a01 = w1, a10 = w3, a11 = w4;
+    double a02 = w2, a12 = w5;
+    a01 *= -1;
+    a10 *= -1;
+    double id = 1 / (a00 * a11 + a01 * -a10);
+    double width  = sx * fw;
+    double height = sy * fh;
+    double ox = a02 - (ax * width);
+    double oy = a12 - (ay * height);
+    double px[4], py[4];
+    double cx[4] = { ox, ox + width, ox, ox + width };
+    double cy[4] = { oy, oy, oy + height, oy + height };
+    for (int i=0; i<4; i++) {
+        double X = cx[i], Y = cy[i];
+        px[i] = ((a11 * id * X + -a01 * id * Y + (a12 * a01 - a02 * a11) * id) * sx) + a02;
+        py[i] = ((a00 * id * Y + -a10 * id * X + (-a12 * a00 + a02 * a10) * id) * sy) + a12;
+    }
+    double l = px[0], r = px[0], t = py[0], b = py[0];
+    for (int i=1; i<4; i++) {
+        if (px[i] < l) l = px[i];
+        if (px[i] > r) r = px[i];
+        if (py[i] < t) t = py[i];
+        if (py[i] > b) b = py[i];
+    }
+    out[0] = l; out[1] = t; out[2] = r; out[3] = b;
+}
+```
+
+val Physics = [
+    w = 0, h = 0,           ;; the world: (0, 0, w, h)
+    dt = 0,                 ;; game.time.physicsElapsed, in seconds
+    bodies = [],            ;; the bodies, in the order they were created
+]
+
+;; a 32-bit float, as the transforms of Pixi keep positions
+func f32 (x) {
+    `:number.float (double)(float)a_dbl($x)`
+}
+
+;; A body for the sprite, with the size of its frame. It starts where the
+;; sprite is drawn, and is in the world only after its first preUpdate.
+func Body (spr) {
+    val b = :Body [
+        spr = spr,
+        w = spr.img.fw * spr.sx, h = spr.img.fh * spr.sy,
+        x = spr.x, y = spr.y, px = spr.x, py = spr.y,
+        vx = 0, vy = 0,
+        world = false,      ;; collideWorldBounds
+        live = false,       ;; in the quadtree of this frame
+    ]
+    set spr.dx = f32(spr.x)     ;; the position drawn
+    set spr.dy = f32(spr.y)
+    set Physics.bodies@+ = b
+    b
+}
+
+func body_remove (b) {
+    loop i, v in Physics.bodies {
+        if v == b {
+            vector.remove(Physics.bodies, i)
+            break
+        }
+    }
+}
+
+;; Sprite.reset(x, y): the sprite moves; the body takes the position drawn
+func body_reset (b, x, y) {
+    set b.spr.x = x
+    set b.spr.y = y
+    set b.vx = 0
+    set b.vy = 0
+    set b.px = b.spr.dx - (b.spr.ax * b.w)
+    set b.py = b.spr.dy - (b.spr.ay * b.h)
+    set b.x = b.px
+    set b.y = b.py
+}
+
+;; Body.preUpdate, for all bodies
+func physics_pre () {
+    loop _, b in Physics.bodies {
+        val s = b.spr
+        set b.px = s.dx - (s.ax * b.w)
+        set b.py = s.dy - (s.ay * b.h)
+        set b.x = b.px
+        set b.y = b.py
+        ;; updateMotion, with no acceleration, drag, or gravity
+        set b.x += b.vx * Physics.dt
+        set b.y += b.vy * Physics.dt
+        if b.world {
+            ifs {
+                b.x < 0 => set b.x = 0
+                (b.x + b.w) > Physics.w => set b.x = Physics.w - b.w
+            }
+            ifs {
+                b.y < 0 => set b.y = 0
+                (b.y + b.h) > Physics.h => set b.y = Physics.h - b.h
+            }
+        }
+        set b.live = s.visible
+    }
+}
+
+;; Body.postUpdate, for all bodies
+func physics_post () {
+    loop _, b in Physics.bodies {
+        val dx = b.x - b.px
+        val dy = b.y - b.py
+        if (dx != 0) || (dy != 0) {
+            set b.spr.x += dx
+            set b.spr.y += dy
+        }
+    }
+}
+
+;; The render: the positions drawn, which the next preUpdate reads
+func physics_draw () {
+    loop _, b in Physics.bodies {
+        set b.spr.dx = f32(b.spr.x)
+        set b.spr.dy = f32(b.spr.y)
+    }
+}
+
+;; Rectangle.intersects of two bodies
+func overlap (a, b) {
+    (a.x < (b.x + b.w)) && (b.x < (a.x + a.w)) && (a.y < (b.y + b.h)) && (b.y < (a.y + a.h))
+}
+
+;; physics.overlap(a, group): the first live body of the group that a
+;; overlaps, or nil
+func overlap_any (a, group) {
+    if a.live {
+        loop _, b in group {
+            if b.live && (b != a) && overlap(a, b) {
+                return b
+            }
+        }
+    }
+    nil
+}
+
+;; Sprite.inWorld: the bounds of the sprite as drawn, against the world
+func in_world (s) {
+    val dx, dy, an, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.angle, s.sx, s.sy, s.img.fw, s.img.fh, s.ax, s.ay)
+    val out = [0, 0, 0, 0]
+    ```
+    double o[4];
+    phs_bounds(a_dbl($dx), a_dbl($dy), a_dbl($an), a_dbl($sx), a_dbl($sy),
+               a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), o);
+    for (int i=0; i<4; i++) {
+        AVal k = a_int(i);
+        AVal v = a_num(o[i]);
+        a_setindex($out, k, v);
+        a_dec(k);
+        a_dec(v);
+    }
+    ```
+    (out@0 < Physics.w) && (0 < out@2) && (out@1 < Physics.h) && (0 < out@3)
+}

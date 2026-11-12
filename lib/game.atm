@@ -1,0 +1,44 @@
+;; Game: a frame of Phaser 1.1.3 (Game.update), over the events of
+;; env/raylib.atm, so that a port does in each frame what its original did,
+;; in the same order:
+;;
+;;      time event      tweens.update: the tasks of Motion move
+;;      :pre            world.update: each sprite updates its animation and
+;;                      tests if it left the world; then the bodies move
+;;                      (physics_pre)
+;;      :update         state.update: the game
+;;      (physics_post)  world.postUpdate: the sprites follow their bodies
+;;      :rl.draw        render
+;;
+;; The game awaits :pre and :update, not :rl.frame. `await Wait(ms)` is a
+;; comparison with the clock of Phaser, in :update, as
+;; `if (game.time.now > this.time)` was in an update.
+
+include "engine.atm"
+include "motion.atm"
+include "sprite.atm"
+include "physics.atm"
+
+;; Phaser drew one random number when it booted, before the game
+eng.random()
+
+task Wait (ms) {
+    val t = eng.now() + ms
+    await :update until eng.now() > t
+}
+
+task Game (w, h) {
+    set Physics.w = w
+    set Physics.h = h
+    var prev = eng.now()
+    loop on :rl.frame {
+        val now = eng.now()
+        set Physics.dt = (now - prev) / 1000
+        set prev = now
+        emit @:global :pre
+        physics_pre()
+        emit @:global :update
+        physics_post()
+        physics_draw()
+    }
+}

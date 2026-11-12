@@ -111,3 +111,24 @@ func sprite_draw (s) {
         eng.draw(s.img, s.frame, s.x, s.y, s.ax, s.ay, s.angle, s.sx, s.sy, s.alpha)
     }
 }
+
+;; Text: a text of Phaser (Pixi), with its anchor and alpha. Its box is as
+;; wide as its widest line and as tall as its lines (eng.text).
+;;
+;;      val t = Text(175, 300, "use the arrow keys", 20)
+;;      set t.ay = 1
+;;      text_draw(t)
+func Text (x, y, s, size, align) {
+    :Text [
+        x = x, y = y, s = s, size = size,
+        ax = 0, ay = 0, alpha = 1, visible = true,
+        align = align || 0,         ;; 0 left, 0.5 center, 1 right
+        color = 0xFFFFFFFF,
+    ]
+}
+
+func text_draw (t) {
+    if t.visible {
+        eng.text(t.s, t.x, t.y, t.size, t.color, t.ax, t.ay, t.align, t.alpha)
+    }
+}

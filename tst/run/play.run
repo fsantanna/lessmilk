@@ -1,0 +1,6 @@
+# Run!: moves in the four directions, a hit, the game over, UP too early
+# (before 800 ms), UP after it, and a second game.
+FRAMES=900
+SEED=7
+INPUT=30:dn:UP,40:up:UP,50:dn:LEFT,70:up:LEFT,80:dn:DOWN,95:up:DOWN,100:dn:RIGHT,140:up:RIGHT,200:dn:UP,215:up:UP,480:dn:UP,482:up:UP,600:dn:UP,610:up:UP,700:dn:LEFT,760:up:LEFT
+SHOTS="1 60 300 464 600 700"
