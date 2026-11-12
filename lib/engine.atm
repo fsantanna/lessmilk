@@ -206,6 +206,14 @@ val eng = [
         math.floor(`:number.float eng_random()` * n)
     },
 
+    ;; eng.now(): the clock of Phaser, in milliseconds (game.time.now). In
+    ;; test mode, the clock of the harness of the originals, computed the same
+    ;; way: frame f is at 1000 + (f-1) * 1000/60. Otherwise, from GetTime.
+    now = func () {
+        val f = rl.frame()
+        if f >= 1 => 1000 + ((f - 1) * (1000 / 60)) => 1000 + (rl.time() * 1000)
+    },
+
     ;; eng.image(path, [fw, fh]): an image, or a sheet of frames of fw x fh
     image = func (path, fw, fh) {
         val id = `:number eng_image(rl_s($path))`

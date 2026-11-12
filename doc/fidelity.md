@@ -54,3 +54,23 @@ that is checked, and what differs, game by game.
   rebuilt from the student's `map.atm`.
 - **Fonts.** The originals ask for Arial; the browser of the container
   draws its own sans font. Text is compared by eye, not pixel by pixel.
+
+## The port: findings that hold for all games
+
+- **The clock.** Phaser compares and interpolates with `game.time.now`, in
+  milliseconds as doubles. The port has the same clock, `eng.now()`, which
+  in test mode is computed as the harness computes it (frame f at
+  `1000 + (f-1) * 1000/60`), so that tweens give the same numbers, digit by
+  digit. The time events of Atmos are integer microseconds (16667 or 16666
+  per frame), and are not used to compute positions.
+- **Random.** The originals call `Math.random`, which the harness replaces
+  by mulberry32; the port has the same generator (`eng.random`), seeded by
+  `RL_SEED`. Phaser draws one number when it boots (to seed `game.rnd`),
+  before frame 1: a port discards one draw at its start.
+- **Easings.** The originals use three: `Linear.None` (35 tweens, and the
+  default of all the others), `Bounce.Out` (10), and `Quadratic.In` (1).
+  `reasings.h` of raylib has the same formulas, but in 32-bit floats:
+  `lib/motion.atm` has them in doubles, as in JavaScript.
+- **Text.** The originals ask for Arial, which the browser of the container
+  draws with Liberation Sans (`fc-match Arial`). The port draws the same
+  font, copied in `lib/fonts/` with its license (SIL OFL 1.1).

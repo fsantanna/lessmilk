@@ -1,0 +1,34 @@
+;; Checks lib/motion.atm: a linear tween, a bounce, and a sequence with a
+;; delay, printed frame by frame.
+
+include "../../lib/engine.atm"
+include "../../lib/motion.atm"
+
+rl.window [title="motion", width=100, height=100]
+
+val a = [x=0, y=100]
+val b = [s=0]
+val c = [angle=0]
+
+spawn {
+    await Motion(a, [x=100, y=0], 100)
+    print(rl.frame(), "a done")
+}
+spawn {
+    await Motion(b, [s=1], 200, Ease.bounce_out)
+    print(rl.frame(), "b done")
+}
+spawn {
+    await 50ms                          ;; .delay(50)
+    loop _ in 2 {                       ;; .to(1).to(-1), twice
+        await Motion(c, [angle=1], 50)
+        await Motion(c, [angle=-1], 50)
+    }
+    print(rl.frame(), "c done")
+}
+spawn {
+    loop on :rl.frame {
+        print(rl.frame(), string.format("%.4f %.4f %.4f %.4f", a.x, a.y, b.s, c.angle))
+    }
+}
+await :rl.quit

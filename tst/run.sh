@@ -33,4 +33,13 @@ else
     fail engine
 fi
 
+# motion: tweens with the clock of Phaser
+tools/atmos.sh tst/env/motion.atm "$OUT/motion" || fail "motion (build)"
+RL_FRAMES=20 "$OUT/motion" 2>/dev/null > "$OUT/motion.out"
+if diff -u tst/env/motion.out "$OUT/motion.out"; then
+    ok motion
+else
+    fail motion
+fi
+
 exit $FAIL
