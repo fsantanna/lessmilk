@@ -2,38 +2,36 @@
 ;; from its source (ext/phaser/1.1.3/src/physics/arcade/).
 ;;
 ;; A body belongs to a sprite. It has a box of the size of a frame, placed by
-;; the anchor of the sprite, a velocity, and the bounds of the world:
+;; the anchor of the sprite, and the fields of Phaser.Physics.Arcade.Body:
 ;;
-;;      val b = Body(spr)                   ;; registers it in Physics.bodies
+;;      val b = Body(spr, :enemy)           ;; registers it in Physics.bodies
 ;;      set b.vx = -300                     ;; px/s, as body.velocity.x
+;;      set b.gy = 12                       ;; body.gravity.y
 ;;      set b.world = true                  ;; collideWorldBounds
+;;      set b.immovable = true
+;;      collide(a, b)                       ;; physics.collide of two sprites
+;;      b.touching.down                     ;; after a collide, in a frame
 ;;
 ;; Each frame of Phaser runs, in this order (lib/game.atm drives it):
 ;;
 ;;      physics_pre()   preUpdate: each body takes the position of its sprite
 ;;                      as drawn in the last frame (a 32-bit float, as in the
-;;                      transform of Pixi), moves by its velocity, and stays
-;;                      in the world
-;;      ...             the update of the game, which may test overlaps
-;;      physics_post()  postUpdate: each sprite moves by what its body moved
-;;      physics_draw()  the position drawn, for the next preUpdate
+;;                      transform of Pixi), and its size from the scale of
+;;                      that transform; then it moves (updateMotion), and
+;;                      stays in the world
+;;      ...             the update of the game, which may collide and overlap
+;;      physics_post()  postUpdate: each sprite moves by what its body moved,
+;;                      and turns by what it turned
+;;      physics_draw()  the transform drawn, for the next preUpdate
 ;;
 ;; Out of bounds: `in_world(spr)` tests the bounds of the sprite as drawn in
 ;; the last frame, rotated, against the world, as Sprite.updateBounds does.
 
 ```:prelude
-// Phaser.Math.wrapAngle
-static double phs_wrap_angle (double a) {
-    double r = fmod(a - (-180), 360);   // JavaScript % is fmod
-    if (r < 0) r += 360;
-    return r + (-180);
-}
-
 // The scale of a sprite, as Sprite.updateCache computes it from the world
 // transform of Pixi (32-bit floats): not exactly the scale when rotated.
 // Body.updateBounds takes it as the scale of the body.
-static void phs_scale (double angle, double sx, double sy, double* out) {
-    double rot = phs_wrap_angle(angle) * (M_PI / 180);
+static void phs_scale (double rot, double sx, double sy, double* out) {
     double sr = sin(rot), cr = cos(rot);
     float a00 = (float)(cr * sx), a01 = (float)(-sr * sy);
     float a10 = (float)(sr * sx), a11 = (float)(cr * sy);
@@ -47,9 +45,8 @@ static void phs_scale (double angle, double sx, double sy, double* out) {
 // Pixi, which is a Float32Array: x y of the last frame drawn, its angle in
 // degrees, its scale, the size of its frame, and its anchor.
 // Out: left top right bottom.
-static void phs_bounds (double x, double y, double angle, double sx, double sy,
+static void phs_bounds (double x, double y, double rot, double sx, double sy,
                         double fw, double fh, double ax, double ay, double* out) {
-    double rot = phs_wrap_angle(angle) * (M_PI / 180);
     double sr = sin(rot), cr = cos(rot);
     float l0 = (float)(cr * sx), l1 = (float)(-sr * sy);
     float l3 = (float)(sr * sx), l4 = (float)(cr * sy);
@@ -87,6 +84,7 @@ static void phs_bounds (double x, double y, double angle, double sx, double sy,
 val Physics = [
     w = 0, h = 0,           ;; the world: (0, 0, w, h)
     dt = 0,                 ;; game.time.physicsElapsed, in seconds
+    gx = 0, gy = 0,         ;; game.physics.gravity
     bodies = [],            ;; the bodies, in the order they were created
 ]
 
@@ -95,21 +93,52 @@ func f32 (x) {
     `:number.float (double)(float)a_dbl($x)`
 }
 
+;; the scale of the transform drawn of a sprite (see phs_scale)
+func drawn_scale (s) {
+    val r, sx, sy = (s.drot, s.dsx, s.dsy)
+    val a = `:number.float ({ double o[2]; phs_scale(a_dbl($r), a_dbl($sx), a_dbl($sy), o); o[0]; })`
+    val b = `:number.float ({ double o[2]; phs_scale(a_dbl($r), a_dbl($sx), a_dbl($sy), o); o[1]; })`
+    (a, b)
+}
+
+;; Sprite.updateCache and the render: the transform drawn, read by the next
+;; preUpdate (position as 32-bit floats, rotation, scale)
+func sprite_drawn (s) {
+    set s.dx  = f32(s.x)
+    set s.dy  = f32(s.y)
+    set s.drot = s.rot
+    set s.dsx = s.sx
+    set s.dsy = s.sy
+}
+
 ;; A body for the sprite, with the size of its frame, in a group (a tag, to
-;; test overlaps against). It starts where the sprite is drawn, and is in
-;; the world only after its first preUpdate.
+;; test overlaps against). It starts where the sprite is, and is in the
+;; world only after its first preUpdate.
 func Body (spr, group) {
     val b = :Body [
         spr = spr,
         group = group,
         w = spr.img.fw * spr.sx, h = spr.img.fh * spr.sy,
         x = spr.x, y = spr.y, px = spr.x, py = spr.y,
-        vx = 0, vy = 0,
-        world = false,      ;; collideWorldBounds
-        live = false,       ;; in the quadtree of this frame
+        rot = 0, prot = 0,              ;; degrees, as body.rotation
+        vx = 0, vy = 0,                 ;; velocity
+        accx = 0, accy = 0,             ;; acceleration
+        dragx = 0, dragy = 0,           ;; drag
+        gx = 0, gy = 0,                 ;; gravity of the body
+        bx = 0, by = 0,                 ;; bounce
+        maxx = 10000, maxy = 10000,     ;; maxVelocity
+        av = 0, aacc = 0, adrag = 0, amax = 1000,  ;; angular
+        mass = 1,
+        immovable = false,
+        moves = true,
+        allow_rotation = true,
+        allow_gravity = true,
+        none = false,                   ;; allowCollision.none
+        world = false,                  ;; collideWorldBounds
+        touching = [ up=false, down=false, left=false, right=false ],
+        live = false,                   ;; in the quadtree of this frame
     ]
-    set spr.dx = f32(spr.x)     ;; the position drawn
-    set spr.dy = f32(spr.y)
+    sprite_drawn(spr)
     set Physics.bodies@+ = b
     b
 }
@@ -127,12 +156,62 @@ func body_remove (b) {
 func body_reset (b, x, y) {
     set b.spr.x = x
     set b.spr.y = y
-    set b.vx = 0
-    set b.vy = 0
+    set b.vx, b.vy = (0, 0)
+    set b.accx, b.accy = (0, 0)
+    set b.av, b.aacc = (0, 0)
     set b.px = b.spr.dx - (b.spr.ax * b.w)
     set b.py = b.spr.dy - (b.spr.ay * b.h)
     set b.x = b.px
     set b.y = b.py
+    set b.rot = angle_get(b.spr)
+    set b.prot = b.rot
+}
+
+;; ArcadePhysics.computeVelocity
+func compute_velocity (axis, b, v, acc, drag, max) {
+    var vel = v
+    val m = max || 10000
+    if (axis == 1) && b.allow_gravity {
+        set vel += Physics.gx + b.gx
+    } else {
+        if (axis == 2) && b.allow_gravity {
+            set vel += Physics.gy + b.gy
+        }
+    }
+    ifs {
+        acc != 0 => set vel += acc * Physics.dt
+        drag != 0 => {
+            val d = drag * Physics.dt
+            ifs {
+                (vel - d) > 0 => set vel -= d
+                (vel + d) < 0 => set vel += d
+                else => set vel = 0
+            }
+        }
+    }
+    ifs {
+        vel > m => m
+        vel < -m => -m
+        else => vel
+    }
+}
+
+;; ArcadePhysics.updateMotion: half of the change of velocity before the
+;; move, half after
+func update_motion (b) {
+    val dt = Physics.dt
+    var d = (((compute_velocity(0, b, b.av, b.aacc, b.adrag, b.amax) - b.av) * dt) * 0.5) * 60
+    set b.av += d
+    set b.rot += b.av * dt
+    set b.av += d
+    set d = (((compute_velocity(1, b, b.vx, b.accx, b.dragx, b.maxx) - b.vx) * dt) * 0.5) * 60
+    set b.vx += d
+    set b.x += b.vx * dt
+    set b.vx += d
+    set d = (((compute_velocity(2, b, b.vy, b.accy, b.dragy, b.maxy) - b.vy) * dt) * 0.5) * 60
+    set b.vy += d
+    set b.y += b.vy * dt
+    set b.vy += d
 }
 
 ;; Body.preUpdate, for all bodies
@@ -140,30 +219,31 @@ func physics_pre () {
     loop _, b in Physics.bodies {
         val s = b.spr
         ;; Sprite.updateBounds -> Body.updateBounds: the size of the body
-        do {
-            val an, sx, sy = (s.angle, s.sx, s.sy)
-            val fw, fh = (s.img.fw, s.img.fh)
-            set b.w = `:number.float ({ double o[2]; phs_scale(a_dbl($an), a_dbl($sx), a_dbl($sy), o); o[0]; }) * a_dbl($fw)`
-            set b.h = `:number.float ({ double o[2]; phs_scale(a_dbl($an), a_dbl($sx), a_dbl($sy), o); o[1]; }) * a_dbl($fh)`
-        }
+        val scx, scy = drawn_scale(s)
+        set b.w = s.img.fw * scx
+        set b.h = s.img.fh * scy
+        set b.touching.up, b.touching.down = (false, false)
+        set b.touching.left, b.touching.right = (false, false)
         set b.px = s.dx - (s.ax * b.w)
         set b.py = s.dy - (s.ay * b.h)
         set b.x = b.px
         set b.y = b.py
-        ;; updateMotion, with no acceleration, drag, or gravity
-        set b.x += b.vx * Physics.dt
-        set b.y += b.vy * Physics.dt
-        if b.world {
-            ifs {
-                b.x < 0 => set b.x = 0
-                (b.x + b.w) > Physics.w => set b.x = Physics.w - b.w
-            }
-            ifs {
-                b.y < 0 => set b.y = 0
-                (b.y + b.h) > Physics.h => set b.y = Physics.h - b.h
+        set b.prot = angle_get(s)
+        set b.rot = b.prot
+        if b.moves {
+            update_motion(b)
+            if b.world {
+                ifs {
+                    b.x < 0 => { set b.x = 0 ; set b.vx *= -b.bx }
+                    (b.x + b.w) > Physics.w => { set b.x = Physics.w - b.w ; set b.vx *= -b.bx }
+                }
+                ifs {
+                    b.y < 0 => { set b.y = 0 ; set b.vy *= -b.by }
+                    (b.y + b.h) > Physics.h => { set b.y = Physics.h - b.h ; set b.vy *= -b.by }
+                }
             }
         }
-        set b.live = s.visible
+        set b.live = !b.none && (s.visible != false) && (s.alive != false)
     }
 }
 
@@ -176,14 +256,16 @@ func physics_post () {
             set b.spr.x += dx
             set b.spr.y += dy
         }
+        if b.allow_rotation {
+            angle_set(b.spr, angle_get(b.spr) + (b.rot - b.prot))
+        }
     }
 }
 
-;; The render: the positions drawn, which the next preUpdate reads
+;; The render: the transforms drawn, which the next preUpdate reads
 func physics_draw () {
     loop _, b in Physics.bodies {
-        set b.spr.dx = f32(b.spr.x)
-        set b.spr.dy = f32(b.spr.y)
+        sprite_drawn(b.spr)
     }
 }
 
@@ -205,13 +287,107 @@ func overlap_any (a, group) {
     nil
 }
 
+;; ArcadePhysics.separateX and separateY (axis :x or :y), OVERLAP_BIAS 4
+func separate_axis (b1, b2, axis) {
+    if b1.immovable && b2.immovable {
+        return false
+    }
+    if !overlap(b1, b2) {
+        return false
+    }
+    val X = axis == :x
+    val p1  = if X => b1.x => b1.y
+    val p2  = if X => b2.x => b2.y
+    val d1  = if X => (b1.x - b1.px) => (b1.y - b1.py)
+    val d2  = if X => (b2.x - b2.px) => (b2.y - b2.py)
+    val s1  = if X => b1.w => b1.h
+    val s2  = if X => b2.w => b2.h
+    val max = (math.abs(d1) + math.abs(d2)) + 4
+    var ov = 0
+    ifs {
+        (d1 == 0) && (d2 == 0) => {
+            set b1.embedded = true
+            set b2.embedded = true
+        }
+        d1 > d2 => {
+            set ov = (p1 + s1) - p2
+            if ov > max {
+                set ov = 0
+            } else {
+                if X { set b1.touching.right = true ; set b2.touching.left = true }
+                else { set b1.touching.down  = true ; set b2.touching.up   = true }
+            }
+        }
+        d1 < d2 => {
+            set ov = (p1 - s2) - p2
+            if -ov > max {
+                set ov = 0
+            } else {
+                if X { set b1.touching.left = true ; set b2.touching.right = true }
+                else { set b1.touching.up   = true ; set b2.touching.down  = true }
+            }
+        }
+    }
+    if ov == 0 {
+        return false
+    }
+    val v1 = if X => b1.vx => b1.vy
+    val v2 = if X => b2.vx => b2.vy
+    val bn1 = if X => b1.bx => b1.by
+    val bn2 = if X => b2.bx => b2.by
+    ifs {
+        !b1.immovable && !b2.immovable => {
+            val o = ov * 0.5
+            val n1 = math.sqrt(((v2 * v2) * b2.mass) / b1.mass) * (if v2 > 0 => 1 => -1)
+            val n2 = math.sqrt(((v1 * v1) * b1.mass) / b2.mass) * (if v1 > 0 => 1 => -1)
+            val avg = (n1 + n2) * 0.5
+            if X {
+                set b1.x = b1.x - o
+                set b2.x += o
+                set b1.vx = avg + ((n1 - avg) * bn1)
+                set b2.vx = avg + ((n2 - avg) * bn2)
+            } else {
+                set b1.y = b1.y - o
+                set b2.y += o
+                set b1.vy = avg + ((n1 - avg) * bn1)
+                set b2.vy = avg + ((n2 - avg) * bn2)
+            }
+        }
+        !b1.immovable => {
+            if X {
+                set b1.x = b1.x - ov
+                set b1.vx = v2 - (v1 * bn1)
+            } else {
+                set b1.y = b1.y - ov
+                set b1.vy = v2 - (v1 * bn1)
+            }
+        }
+        !b2.immovable => {
+            if X {
+                set b2.x += ov
+                set b2.vx = v1 - (v2 * bn2)
+            } else {
+                set b2.y += ov
+                set b2.vy = v1 - (v2 * bn2)
+            }
+        }
+    }
+    true
+}
+
+;; physics.collide of two sprites (their bodies): separateX, or else
+;; separateY; true if they were separated
+func collide (b1, b2) {
+    separate_axis(b1, b2, :x) || separate_axis(b1, b2, :y)
+}
+
 ;; Sprite.inWorld: the bounds of the sprite as drawn, against the world
 func in_world (s) {
-    val dx, dy, an, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.angle, s.sx, s.sy, s.img.fw, s.img.fh, s.ax, s.ay)
+    val dx, dy, r, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.drot, s.dsx, s.dsy, s.img.fw, s.img.fh, s.ax, s.ay)
     val out = [0, 0, 0, 0]
     ```
     double o[4];
-    phs_bounds(a_dbl($dx), a_dbl($dy), a_dbl($an), a_dbl($sx), a_dbl($sy),
+    phs_bounds(a_dbl($dx), a_dbl($dy), a_dbl($r), a_dbl($sx), a_dbl($sy),
                a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), o);
     for (int i=0; i<4; i++) {
         AVal k = a_int(i);
