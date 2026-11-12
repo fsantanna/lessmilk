@@ -1,7 +1,8 @@
 ;; Checks lib/motion.atm: a linear tween, a bounce, and a sequence with a
-;; delay, printed frame by frame. Started before frame 1, as in a create, a
-;; tween first moves in frame 2; started after the end of another (in the
-;; pass of the tweens), in the next frame.
+;; wait, printed frame by frame. Started before frame 1, as in a create, a
+;; tween first moves in frame 2; started in an update (after the Wait, in
+;; frame 5), in frame 7; started after the end of another (in the pass of
+;; the tweens), in the next frame.
 
 include "../../lib/game.atm"
 
@@ -21,7 +22,7 @@ spawn {
     print(rl.frame(), "b done")
 }
 spawn {
-    await 50ms                          ;; .delay(50)
+    await Wait(50)                      ;; a wait of 50 ms in the updates
     loop _ in 2 {                       ;; .to(1).to(-1), twice
         await Motion(c, [angle=1], 50)
         await Motion(c, [angle=-1], 50)

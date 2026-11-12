@@ -64,6 +64,7 @@ task Game (w, h) {
     var prev = eng.now()
     loop on :rl.frame {
         set Keys.frame += 1
+        eng.tick()
         val now = eng.now()
         set Physics.elapsed = now - prev
         set Physics.dt = Physics.elapsed / 1000

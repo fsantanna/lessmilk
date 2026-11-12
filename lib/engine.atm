@@ -229,6 +229,7 @@ val FONT_MONO = [ path="lib/fonts/LiberationMono-Regular.ttf", asc=1705, desc=61
 val ENG_IMAGES = []
 val ENG_SOUNDS = []
 val ENG_AUDIO  = [ tried = false ]
+val ENG_CLOCK  = [ now = 1000 ]
 
 val eng = [
 
@@ -268,12 +269,21 @@ val eng = [
         math.floor(`:number.float eng_random()` * n)
     },
 
-    ;; eng.now(): the clock of Phaser, in milliseconds (game.time.now). In
-    ;; test mode, the clock of the harness of the originals, computed the same
-    ;; way: frame f is at 1000 + (f-1) * 1000/60. Otherwise, from GetTime.
+    ;; eng.now(): the clock of Phaser, in milliseconds (game.time.now): the
+    ;; time of the current frame, set when the frame starts (eng.tick, called
+    ;; by lib/game.atm), and the same between frames, where the input of the
+    ;; next frame comes (a callback of a key or of the mouse, in Phaser, sees
+    ;; the time of the frame before). 1000 before the first frame.
     now = func () {
+        ENG_CLOCK.now
+    },
+
+    ;; eng.tick(): the time of this frame. In test mode, the clock of the
+    ;; harness of the originals, computed the same way: frame f is at
+    ;; 1000 + (f-1) * 1000/60. Otherwise, from GetTime.
+    tick = func () {
         val f = rl.frame()
-        if f >= 1 => 1000 + ((f - 1) * (1000 / 60)) => 1000 + (rl.time() * 1000)
+        set ENG_CLOCK.now = if f >= 1 => 1000 + ((f - 1) * (1000 / 60)) => 1000 + (rl.time() * 1000)
     },
 
     ;; eng.fixed(x, n): x with n decimals, as Number.toFixed in the traces
