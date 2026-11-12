@@ -38,7 +38,9 @@ make -s -C ext/ceu-atmos >/dev/null
 if [ ! -d ext/raylib ]; then
     git -c advice.detachedHead=false clone -q --depth 1 --branch $RAYLIB_TAG https://github.com/raysan5/raylib ext/raylib
 fi
+# the patch, on a clean raylib whenever it changes
 if ! git -C ext/raylib apply --check --reverse "$ROOT/env/raylib.patch" 2>/dev/null; then
+    git -C ext/raylib checkout -q -- .
     git -C ext/raylib apply "$ROOT/env/raylib.patch"
 fi
 mkdir -p ext/raylib/build-mem
