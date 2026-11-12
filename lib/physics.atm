@@ -549,3 +549,54 @@ func in_world (s) {
     val l, t, r, b = sprite_bounds(s)
     (l < Physics.w) && (0 < r) && (t < Physics.h) && (0 < b)
 }
+
+;; Group: game.add.group() and createMultiple(n, key): n sprites with bodies,
+;; dead, in slots, recycled with group_first_dead (getFirstExists(false)).
+;; A sprite keeps what it had in its last life (its angle, its frame, the
+;; size of its body, inWorld), as in Phaser.
+func Group (img, n, tag) {
+    val g = :Group [ slots = [] ]
+    loop _ in n {
+        val s = Sprite(img, 0, 0)
+        set s.alive, s.exists, s.visible = (false, false, false)
+        val b = Body(s, tag)
+        set g.slots@+ = [ s=s, b=b ]
+    }
+    g
+}
+
+;; the bodies of the group leave the physics (at the end of a state)
+func group_remove (g) {
+    loop _, x in g.slots {
+        body_remove(x.b)
+    }
+}
+
+;; getFirstExists(false): the first slot whose sprite does not exist, or nil
+func group_first_dead (g) {
+    loop _, x in g.slots {
+        if !x.s.exists {
+            return x
+        }
+    }
+    nil
+}
+
+;; the slots whose sprites exist
+func group_living (g) {
+    val out = []
+    loop _, x in g.slots {
+        if x.s.exists {
+            set out@+ = x
+        }
+    }
+    out
+}
+
+func group_draw (g) {
+    loop _, x in g.slots {
+        if x.s.visible {
+            sprite_draw(x.s)
+        }
+    }
+}

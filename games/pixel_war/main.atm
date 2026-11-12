@@ -1,0 +1,49 @@
+;; Pixel War (lessmilk.com, game #2, 2014), by Thomas Palef.
+;; Ported to Atmos from the original (Phaser 1.1.3) and from the port of
+;; Jessica Oliveira (jessicacoliveira/atmos-lessmilk, pixel_war).
+;;
+;; The player moves at the bottom and fires up; enemies and bullets fall;
+;; a bonus adds fires. Three lives; then the score, and UP plays again.
+
+include "../../lib/game.atm"
+
+val W, H = (300, 500)
+val BG = 0x2980B9FF
+val A = "assets/2/"
+
+var score = 0               ;; the global `score` of the original
+
+;; [trace]
+var screen = "Intro"
+val Pix = [ play = nil ]
+;; [/trace]
+
+rl.window [title="Pixel War", width=W, height=H]
+
+include "intro.atm"
+include "play.atm"
+include "over.atm"
+
+spawn Game(W, H)
+
+;; [trace]
+spawn {
+    if os.getenv("RL_FRAMES") {
+        loop on :rl.frame {
+            print(trace())
+        }
+    }
+}
+;; [/trace]
+
+await Intro()
+loop {
+    ;; [trace]
+    set screen = "Play"
+    ;; [/trace]
+    val shown = await Play()
+    ;; [trace]
+    set screen = "Over"
+    ;; [/trace]
+    await Over(shown)
+}

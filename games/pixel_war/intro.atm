@@ -1,0 +1,14 @@
+;; Intro: the picture, until UP.
+
+val IMG_BG = eng.image(A ++ "images/bg.png")
+
+task Intro () {
+    val keys = Cursor()
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            eng.draw(IMG_BG, 0, 0, 0)
+        }
+    }
+    await :update until cursor_down(keys, 'UP')
+}

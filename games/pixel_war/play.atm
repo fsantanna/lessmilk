@@ -1,0 +1,257 @@
+;; Play: the player, and four groups of sprites recycled as in Phaser:
+;; enemies, fires, bonuses, bullets.
+
+val IMG_PLAYER = eng.image(A ++ "images/player.png")
+val IMG_FIRE   = eng.image(A ++ "images/fire.png")
+val IMG_BONUS  = eng.image(A ++ "images/bonus.png")
+val IMG_PIXEL  = eng.image(A ++ "images/pixel.png")
+val IMG_BULLET = eng.image(A ++ "images/bullet.png", 16, 32)
+val IMG_ENEMY  = eng.image(A ++ "images/enemy.png")
+val SND_HIT   = eng.sound(A ++ "sounds/hit.wav")
+val SND_FIRE  = eng.sound(A ++ "sounds/fire.wav")
+val SND_EXP   = eng.sound(A ++ "sounds/exp.wav")
+val SND_BONUS = eng.sound(A ++ "sounds/bonus.wav")
+
+;; rand(num) of the original
+func rand (n) {
+    eng.rand(n)
+}
+
+;; a tween of the player down and back, chained
+task Bump (p, y0, dy, ms) {
+    await Motion(p, [y=y0 + dy], ms)
+    await Motion(p, [y=y0], ms)
+}
+
+task Play () {
+    val keys = Cursor()
+    val player_y = H - 70
+    var lives, evolution = (3, 1)
+    set score = 0
+
+    val enemies = Group(IMG_ENEMY, 25, :enemy)
+    val fires   = Group(IMG_FIRE, 25, :fire)
+    val bonuses = Group(IMG_BONUS, 3, :bonus)
+    val bullets = Group(IMG_BULLET, 25, :bullet)
+    loop _, g in [enemies, fires, bonuses, bullets] {
+        loop _, x in g.slots {
+            set x.s.oob_kill = true
+        }
+    }
+    val player = Sprite(IMG_PLAYER, W/2, player_y)
+    val pbody = Body(player, :player)
+    set pbody.world = true
+    defer {
+        loop _, g in [enemies, fires, bonuses, bullets] {
+            group_remove(g)
+        }
+        body_remove(pbody)
+    }
+
+    val emitter = Emitter(IMG_PIXEL, 200)
+    set emitter.gravity = 0
+    spawn Emitter_run(emitter)
+
+    val lives_text = Text(W - 25, 10, "3", 30)
+    val score_text = Text(10, 10, "0", 30)
+    pin tweens = tasks()
+
+    ;; [trace]
+    set Pix.play = [ lives=\{ lives }, evolution=\{ evolution }, player=player,
+                     enemies=enemies, fires=fires, bonuses=bonuses, bullets=bullets,
+                     emitter=emitter ]
+    ;; [/trace]
+
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            group_draw(enemies)
+            group_draw(fires)
+            group_draw(bonuses)
+            group_draw(bullets)
+            sprite_draw(player)
+            emitter_draw(emitter)
+            text_draw(lives_text)
+            text_draw(score_text)
+        }
+    }
+
+    ;; the animations of the bullets, in preUpdate
+    spawn {
+        loop on :pre {
+            loop _, x in bullets.slots {
+                if x.s.exists {
+                    sprite_update(x.s)
+                }
+            }
+        }
+    }
+
+    val func update_score (n) {
+        set score += n
+        set score_text.s = tostring(score)
+    }
+
+    ;; oneFire
+    val func one_fire (x, y) {
+        val f = group_first_dead(fires)
+        sprite_reset(f.s, f.b, x - (IMG_FIRE.fw / 2), y - IMG_FIRE.fh)
+        set f.b.vy = -500
+    }
+
+    ;; fire: one, two, or three fires, by the evolution
+    val func fire () {
+        eng.play(SND_FIRE, 0.1)
+        val pw = IMG_PLAYER.fw
+        ifs {
+            evolution == 1 => one_fire(player.x + (pw / 2), player.y)
+            evolution == 2 => {
+                one_fire(player.x + ((pw * 1) / 4), player.y)
+                one_fire(player.x + ((pw * 3) / 4), player.y)
+            }
+            else => {
+                one_fire(player.x, player.y)
+                one_fire(player.x + (pw / 2), player.y)
+                one_fire(player.x + pw, player.y)
+            }
+        }
+        spawn @tweens Bump(player, player_y, 5, 50)
+    }
+
+    ;; the arrows, polled in each update
+    spawn {
+        loop on :update {
+            set pbody.vx = 0
+            ifs {
+                cursor_down(keys, 'LEFT')  => set pbody.vx = -350
+                cursor_down(keys, 'RIGHT') => set pbody.vx = 350
+            }
+        }
+    }
+
+    ;; fire while UP is down, every 300 ms (fireTime)
+    spawn {
+        loop {
+            if !cursor_down(keys, 'UP') {
+                await :update until cursor_down(keys, 'UP')
+            }
+            fire()
+            await Wait(300)
+        }
+    }
+
+    ;; an enemy now and then every 250 ms (enemyTime), if a slot is free
+    spawn {
+        await :update
+        loop {
+            val e = group_first_dead(enemies)
+            if e {
+                body_set_size(e.b, IMG_ENEMY.fw, IMG_ENEMY.fh / 2, 0, 0)
+                sprite_reset(e.s, e.b, (rand((W / IMG_ENEMY.fw) - 1) * IMG_ENEMY.fw) + 7, -IMG_ENEMY.fh)
+                set e.b.vy = 300
+            }
+            await Wait(250)
+        }
+    }
+
+    ;; a bullet now and then (bulletTime), sooner as the score grows
+    spawn {
+        await :update
+        loop {
+            val wait = 1000 - (score / 2)
+            val b = group_first_dead(bullets)
+            if b {
+                sprite_reset(b.s, b.b, rand(W - IMG_BULLET.fw), -IMG_BULLET.fh)
+                set b.b.vy = 350
+                sprite_add(b.s, :move)
+                sprite_play(b.s, :move, 4, true)
+            }
+            await Wait(wait)
+        }
+    }
+
+    ;; a bonus now and then every 5 s (bonusTime), turning
+    spawn {
+        await :update
+        loop {
+            val x = group_first_dead(bonuses)
+            sprite_reset(x.s, x.b, rand(W - IMG_BONUS.fw) + (IMG_BONUS.fw / 2), -IMG_BONUS.fh / 2)
+            set x.b.vy = 150
+            set x.s.ax, x.s.ay = (0.5, 0.5)
+            spawn @tweens Motion(x.s, [angle=360], 3500)
+            await Wait(5000)
+        }
+    }
+
+    ;; the overlaps, at the end of the update, in the order of the original.
+    ;; The last life starts Over at once in the original (inside the
+    ;; callback), with the score of that moment, and the rest of the update
+    ;; still runs: Play ends after it, and gives Over that score.
+    var over = nil
+    val func player_hit (other) {
+        set lives -= 1
+        if lives == 0 {
+            set lives, evolution = (3, 1)       ;; clear
+            if over == nil {
+                set over = score
+            }
+        }
+        sprite_kill(other.spr)
+        eng.play(SND_HIT, 0.2)
+        spawn @tweens Bump(player, player_y, 20, 100)
+        set evolution = 1
+        set lives_text.s = tostring(lives)
+    }
+    loop on :overlap {
+        loop _, e in overlap_list(pbody, :enemy) {
+            player_hit(e)
+        }
+        loop _, f in fires.slots {
+            if f.s.exists {
+                loop _, e in overlap_list(f.b, :enemy) {
+                    eng.play(SND_EXP, 0.1)
+                    set emitter.x = e.spr.x + (IMG_ENEMY.fw / 2)
+                    set emitter.y = e.spr.y + (IMG_ENEMY.fh / 2)
+                    sprite_kill(f.s)
+                    sprite_kill(e.spr)
+                    emitter_start(emitter, true, 300, nil, 10)
+                    update_score(10)
+                }
+            }
+        }
+        loop _, b in overlap_list(pbody, :bonus) {
+            eng.play(SND_BONUS, 0.1)
+            sprite_kill(b.spr)
+            set evolution += 1
+            update_score(100)
+        }
+        loop _, b in overlap_list(pbody, :bullet) {
+            player_hit(b)
+        }
+        until over != nil
+    }
+    over
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/2.js
+func trace () {
+    val f = rl.frame()
+    if screen != "Play" {
+        return tostring(f) ++ " " ++ screen ++ " " ++ tostring(score)
+    }
+    val p = Pix.play
+    var n, sx, sy = (0, 0, 0)
+    loop _, x in group_living(p.enemies) {
+        set n += 1
+        set sx += x.s.x
+        set sy += x.s.y
+    }
+    tostring(f) ++ " Play " ++ tostring(score) ++ " " ++ tostring(p.lives()) ++ " " ++
+        tostring(p.evolution()) ++ " " ++ eng.fixed(p.player.x, 2) ++ " " ++
+        eng.fixed(p.player.y, 2) ++ " " ++ tostring(n) ++ " " ++ eng.fixed(sx, 2) ++ " " ++
+        eng.fixed(sy, 2) ++ " " ++ tostring(#group_living(p.fires)) ++ " " ++
+        tostring(#group_living(p.bullets)) ++ " " ++ tostring(#group_living(p.bonuses)) ++ " " ++
+        tostring(#p.emitter.sprites)
+}
+;; [/trace]
