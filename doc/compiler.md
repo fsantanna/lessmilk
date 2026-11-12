@@ -34,9 +34,15 @@ maintains it. Nothing here blocked the port.
    before the table. Not a bug; noted because the student's modules did it
    in the reference Atmos with globals.
 
+6. **`math.atan(y, x)` ignores its second argument.** `math.atan(1, 2)` is
+   `0.785...` (the angle of 1), with no error; in Lua 5.4, which the manual
+   follows for `math`, it is the angle of the point `(2, 1)`, `0.4636...`.
+   The student's code used it so. `math.atan2(y, x)` is right. Either
+   accept the second argument as Lua does, or reject it.
+
 ## Pitfalls met again
 
-6. **A spawn inside an `if` dies with the block** (also in the list of the
+7. **A spawn inside an `if` dies with the block** (also in the list of the
    Pingus port). The task of the trace was spawned inside
    `if os.getenv("RL_FRAMES") { spawn {...} }` and printed nothing; it
    tests inside the task now.
