@@ -62,6 +62,7 @@ original can be compared line by line. See [doc/fidelity.md](doc/fidelity.md).
 | # | Game | Port | Same as the original |
 |--:|------|------|----------------------|
 | 1 | Run! | `games/run` | yes, 3 runs |
+| 3 | Box Jump | `games/box_jump` | yes, 2 runs |
 
 Documents: [table](doc/table.md), [state variables](doc/state.md),
 [fidelity](doc/fidelity.md), [compiler](doc/compiler.md),
