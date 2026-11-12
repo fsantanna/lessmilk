@@ -17,7 +17,9 @@
 
     // mulberry32: 32-bit state, a double in [0,1) per call
     var s = (P.seed >>> 0);
+    window.__draws = 0;     // calls to Math.random so far
     Math.random = function () {
+        window.__draws++;
         s = (s + 0x6D2B79F5) >>> 0;
         var t = s;
         t = Math.imul(t ^ (t >>> 15), t | 1);

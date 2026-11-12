@@ -103,7 +103,8 @@ ${tags.join('\n')}
         await pg.waitForTimeout(5);
         if (++waited > 2000) throw new Error('run: the game did not load');
     }
-    console.error(`run: loaded after ${waited} frames`);
+    const draws = await pg.evaluate(() => window.__draws);
+    console.error(`run: loaded after ${waited} frames, ${draws} random draws`);
     if (run.input[1]) throw new Error('run: no input at frame 1, which runs while loading');
     await pg.evaluate(() => { window.__frame = 1; });
 
