@@ -72,6 +72,27 @@ Control: 3 in the JavaScript (`start`, `rotation`, `alive`), 2 left in the
 port (`rotation`, now a control table rather than a tween, and `alive`, which
 the physics reads).
 
+## 4. Man vs Penguins
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `w`, `h`, the level, the places of the coins | constant | `W`, `H`, `PLATFORMS`, `WALLS`, `COINS0..2` |
+| `this.score`, `this.bestScore`, `this.coinX` (Play) | data | locals of `Play` |
+| `this.playerJumpCount` (Play) | control: the jump goes higher while UP is held, up to 20 updates; 0 when UP is released in the air | `jump_count`, the same counter |
+| `this.enemyTime` (Play) | control: the time of the next penguin | `enemy_time`, the same comparison with the clock (see below) |
+| `this.half` (Play) | control: the next penguin walks to the other side | `half`, the same flag |
+| `this.oneCoin`, `this.oneKill`, `labelTutorial.alive` (Play) | control: the tutorial fades once a coin was taken and a penguin killed | `await <:coin && :kill>`, then the fade |
+| `this.jumped` (Play) | never read | gone |
+| `this.enemies` (group of 40) | recycled sprites | `Group` |
+| `this.platforms`, `this.walls` | groups of bricks | `Bricks` |
+
+Control: 6 in the JavaScript, 3 left. The counter of the jump is a level
+of a key counted over updates. The time of the next penguin stays a
+comparison in the update: its `rand(500)` must be drawn after the one of
+the coin in the same update, and a loop with `await Wait` in another task
+would draw it before (the tasks of `Play` awake before its body). `half`
+alternates between two places that call `newEnemy`.
+
 ## 8. Save the City
 
 | JavaScript | Kind | Port |

@@ -95,6 +95,18 @@ that is checked, and what differs, game by game.
   started there counts from it. `eng.now()` is that clock, set by `Game`
   when a frame starts.
 
+## The code that runs is the minified one
+
+The games load `phaser113.min.js` (and 116, 201, 202) from the site, not
+the source of the tag `1.1.3` of Phaser. The minifier reorders some
+arithmetic: in `updateMotion`, `(cv - v) * dt * 0.5 * 60` of the source
+became `60 * .5 * (cv - v) * dt`, which rounds differently. A gravity of 5
+in Man vs Penguins showed it: a velocity two units in the last place apart
+after three frames, and a trace line apart after 568 frames. The formulas
+that the port copies were checked against the minified file: the tween,
+the easings, the generator, `preUpdate`, `postUpdate`, the bounds,
+`separate`, `wrap`; only `updateMotion` differs.
+
 ## How the port follows a frame of Phaser 1.1.3
 
 `lib/game.atm` emits, in each frame, what `Game.update` of Phaser 1.1.3
@@ -150,6 +162,13 @@ What Phaser 1.1.3 does there, and the port copies:
   clock of Phaser (0 in frame 1). `updateMotion` applies half of the change
   of velocity before the move and half after; gravity is added to the
   velocity in each frame, not scaled by the time (12 a frame in Box Jump).
+- **The camera.** A sprite's transform is relative to the camera
+  (`f32(x - camera.x)`, in the render), and a body reads its position back
+  with the camera of the time it reads it (`camera.x + transform`): when the
+  camera shakes, the bodies shift with it. Setting `camera.x` keeps it in
+  the bounds of the world and floors it.
+- **Traces.** `Number.toFixed` rounds a tie up (3.375 gives "3.38");
+  `printf` rounds it to even. `eng.fixed` does as JavaScript.
 - **Angles.** A sprite keeps its rotation in radians; `angle` is wrapped to
   [-180, 180) when set and when read, and `postUpdate` sets it again from
   the rotation of the body in each frame. The port keeps the rotation, with
@@ -257,6 +276,27 @@ What is not compared:
 - A rotation of an earlier jump that is still running when the player
   starts again: Phaser pauses only the last one, and so does the port, but
   no run has two jumps 700 ms apart with a death in between.
+
+## 4. Man vs Penguins
+
+The same as the original on its two runs, line by line
+(`tst/man_penguins/`):
+
+| Run | Frames | Seed | Input |
+|-----|-------:|-----:|-------|
+| `play` | 3600 | 5 | UP on the menu; the arrows at random, overlapping (Python's generator, seed 4) |
+| `jumpy` | 4800 | 11 | many jumps, and LEFT and RIGHT at random (seed 14) |
+
+Trace: frame, state; in Play, the score, the best score, the man (x, y,
+velocity, alive, the count of the jump), the penguins that exist (how many,
+alive, sums of x and y), the coin (x, y), and the camera (x, y).
+
+What it took: `collide` of a sprite with a group, and of a group with a
+group, in the order of the quadtree; the world wider than the screen
+(`setBounds(-50, -50, 800, 800)`); flipped sprites, whose `width` is
+negative in Phaser and whose body is not; the corners of the bounds
+(`bottomRight.y < topRight.y + 10` decides a jump on a penguin); the camera;
+and the arithmetic of the minified `updateMotion`.
 
 ## 8. Save the City
 

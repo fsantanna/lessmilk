@@ -80,6 +80,16 @@ the indexes, and the units change everywhere.
 - Her particles have their own random speeds; here they are those of the
   emitter, from `game.rnd`, so that they are the same as the original's.
 
+## 4. Man vs Penguins
+
+- The student's version (`modular/`, 501 lines) has a task per entity
+  (`Man`, `Penguin`, `Coin`), its own collisions with the map
+  (`collision.atm`), and a shake of its own.
+- The port keeps the physics of the original: bodies with gravity,
+  `collide` with the bricks, and the overlaps of Phaser, since the game is
+  the jumps and the falls that they give; the penguins are a group of 40
+  recycled sprites, and the camera shakes as Phaser's.
+
 ## 8. Save the City
 
 - The student's version has a task per letter as well (`letter.atm`), and
