@@ -47,6 +47,20 @@ the indexes, and the units change everywhere.
   here the player is part of `Play`, whose end is the hit: the original has
   no separate life for the player.
 
+## 2. Pixel War
+
+- The student's version is one file (`main.atm`, 345 lines), with a task per
+  enemy, fire, bullet, and bonus, each ending when it leaves the screen or
+  is hit; the collisions are tested by each task, or by loops over the
+  pools.
+- The port keeps the groups of the original as slots (`Group`), since what
+  a recycled sprite keeps shows in the game (see state.md); the life of an
+  enemy is the time its slot exists, not a task. The four timers become
+  four loops with `await Wait(...)`, as in her version.
+- Her collisions are tested every frame by the tasks; here they are the
+  overlaps of Phaser at the end of the update, in their order, with the
+  quadtree of the frame.
+
 ## 3. Box Jump
 
 - The student's version is one file (`main.atm`, 233 lines), with a task per

@@ -192,6 +192,38 @@ What is not compared:
   first update in that frame. The port awaits `:rl.mouse.up`, which comes
   before `:rl.frame` in the frame of the input.
 
+## 2. Pixel War
+
+The same as the original on its two runs, line by line (`tst/pixel_war/`):
+
+| Run | Frames | Seed | Input | Games |
+|-----|-------:|-----:|-------|------:|
+| `play` | 2400 | 4 | UP held to fire, released now and then, LEFT and RIGHT at random (Python's generator, seed 2) | 3 |
+| `dodge` | 3600 | 8 | UP held, pressed again every 300 frames, short moves at random (seed 17) | 6 |
+
+Trace: frame, state, score; in Play, the lives, the evolution, the player
+(x, y), the enemies alive (how many, the sums of x and of y), and how many
+fires, bullets, bonuses, and particles exist.
+
+What it took, besides the rest of this document:
+
+- **Groups.** The four groups are slots, recycled with
+  `getFirstExists(false)`, each sprite keeping its state from life to life
+  (`Group` in `lib/physics.atm`). The first enemy of each slot dies in the
+  frame after it is born: `inWorld` comes true from the constructor, and the
+  enemy is born out of the world.
+- **The order of the overlaps.** `overlap(fires, enemies)` goes through the
+  fires in the order of their slots and, for each, through the enemies in
+  the order of the quadtree; a fire killed by a hit still hits the other
+  enemies it overlaps in that frame. The emitter goes to the last one.
+- **The last life.** Over starts inside the callback of the hit, with the
+  score of that moment; the rest of the update of Play still runs, and a
+  fire that hits an enemy in that frame still adds to the score (seen in
+  `dodge`: Over shows 10, the score is 20).
+- **A key that fires every 300 ms.** The time is tested in the same update
+  as the key: after `await Wait(300)`, the port tests UP at once, and only
+  awaits it if it is up.
+
 ## 3. Box Jump
 
 The same as the original on its two runs, line by line (`tst/box_jump/`):

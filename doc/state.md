@@ -27,6 +27,32 @@ Control: 4 in the JavaScript (`enemyTime`, `scoreTime`, `firstKey`, and
 `time` of Over), 0 in the port. Left in the port for the trace only:
 `screen`, which the game never reads.
 
+## 2. Pixel War
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `w`, `h`, `this.playerY` | constant | `W`, `H`, `player_y` |
+| `score` (global) | data, shown in Play and Over | `score`, a global of the port too |
+| `this.lives`, `this.evolution` (Play) | data | locals of `Play` |
+| `this.fireTime` (Play) | control: one fire every 300 ms while UP is down | the loop of the fires: UP, `fire()`, `await Wait(300)` |
+| `this.enemyTime`, `this.bulletTime`, `this.bonusTime` (Play) | control: the time of the next enemy, bullet, bonus | three loops, each with its `await Wait(...)` |
+| `this.time` (Over) | control: UP is ignored for 800 ms | `await Wait(800)` |
+| `this.enemies`, `this.fires`, `this.bonuses`, `this.bullets` | groups of sprites, recycled | `Group`: the same slots, recycled the same way (see below) |
+| `this.player`, `this.emitter`, labels | drawn | locals of `Play` |
+| `this.cursor` | input | `keys = Cursor()`, in each state |
+
+Control: 5 in the JavaScript, 1 left: `over` in Play, the score at the
+moment of the last life, which ends the loop of the overlaps after the rest
+of that frame (the original starts Over inside the callback, and the update
+goes on).
+
+The groups stay groups of slots. A sprite of Phaser keeps what it had in
+its last life (its angle, the size of its body, `inWorld`), and the game
+shows it: the first enemy of each slot is born out of the world with
+`inWorld` true, from the constructor, and dies at once; a bonus turns from
+the angle where its last one stopped. A task per life with a new sprite
+would not be the same game.
+
 ## 3. Box Jump
 
 | JavaScript | Kind | Port |
