@@ -1,0 +1,29 @@
+;; Checks lib/sprite.atm: the frames of a looping animation at 10 fps, a play
+;; of the animation that plays (which does not restart it), another
+;; animation, and a stop.
+
+include "../../lib/engine.atm"
+include "../../lib/sprite.atm"
+
+rl.window [title="sprite", width=100, height=100]
+
+val p = Sprite(eng.image("assets/1/images/player.png", 20, 24), 50, 50)
+sprite_add(p, :bottom, [0, 1], 10, true)
+sprite_add(p, :left, [6, 7], 10, true)
+print(rl.frame(), p.frame)                  ;; the last added: 6
+
+spawn {
+    loop on :rl.frame {
+        val f = rl.frame()
+        ifs {
+            f == 2  => sprite_play(p, :bottom)
+            (f > 2) && (f < 20) => sprite_play(p, :bottom)  ;; each frame
+            f == 20 => sprite_play(p, :left)
+            f == 30 => sprite_stop(p)
+            f == 40 => sprite_play(p, :left)
+        }
+        sprite_update(p)
+        print(f, p.frame)
+    }
+}
+await :rl.quit

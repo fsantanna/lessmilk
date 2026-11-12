@@ -42,4 +42,13 @@ else
     fail motion
 fi
 
+# sprite: animations with the clock of Phaser
+tools/atmos.sh tst/env/sprite.atm "$OUT/sprite" || fail "sprite (build)"
+RL_FRAMES=45 "$OUT/sprite" 2>/dev/null > "$OUT/sprite.out"
+if diff -u tst/env/sprite.out "$OUT/sprite.out"; then
+    ok sprite
+else
+    fail sprite
+fi
+
 exit $FAIL

@@ -1,0 +1,113 @@
+;; Sprite: an image or a sheet, with a position, an anchor, an angle, a
+;; scale, an alpha, and named animations, as a sprite of Phaser 1.1.3.
+;;
+;;      val p = Sprite(img, 175, 175)
+;;      sprite_add(p, :left, [6, 7], 10, true)  ;; animations.add
+;;      sprite_play(p, :left)                   ;; animations.play
+;;      sprite_stop(p)                          ;; animations.stop
+;;      sprite_update(p)                        ;; once per frame
+;;      sprite_draw(p)                          ;; in :rl.draw
+;;
+;; The frames of an animation follow the clock of Phaser (eng.now), as
+;; Phaser.Animation does: a frame every 1000/fps ms, with the late frames
+;; skipped, and `sprite_play` of the animation that already plays does not
+;; restart it. `sprite_update` is called where Phaser updates the sprite:
+;; after the tweens, before the update of the state.
+
+func Sprite (img, x, y) {
+    :Sprite [
+        img = img,
+        x = x, y = y,
+        ax = 0, ay = 0,             ;; anchor
+        angle = 0,                  ;; degrees
+        sx = 1, sy = 1,             ;; scale
+        alpha = 1,
+        visible = true,
+        frame = 0,                  ;; the frame on display
+        anims = [],                 ;; name -> [frames, delay, loop]
+        cur = nil,                  ;; the current animation
+        playing = false,
+        index = 0,                  ;; in the frames of the current animation
+        next = 0,                   ;; time of the next frame
+    ]
+}
+
+;; the size of a frame, scaled
+func sprite_w (s) { s.img.fw * math.abs(s.sx) }
+func sprite_h (s) { s.img.fh * math.abs(s.sy) }
+
+;; animations.add(name, frames, fps, loop): as in Phaser, the animation
+;; becomes the current one, stopped, showing its first frame; with no frames,
+;; all the frames of the sheet
+func sprite_add (s, name, frames, fps, loop_) {
+    val fs = frames || do {
+        val n = (s.img.w // s.img.fw) * (s.img.h // s.img.fh)
+        val all = []
+        loop i in n {
+            set all@+ = i
+        }
+        all
+    }
+    val a = [ frames=fs, delay=1000/(fps || 60), loop=loop_ || false ]
+    set s.anims@(name) = a
+    set s.cur = a
+    set s.playing = false
+    set s.index = 0
+    set s.frame = fs@0
+    a
+}
+
+;; animations.play(name, [fps, loop])
+func sprite_play (s, name, fps, loop_) {
+    val a = s.anims@(name)
+    if a && ((a != s.cur) || !s.playing) {
+        if fps {
+            set a.delay = 1000 / fps
+        }
+        if loop_ != nil {
+            set a.loop = loop_
+        }
+        set s.cur = a
+        set s.playing = true
+        set s.index = 0
+        set s.next = eng.now() + a.delay
+        set s.frame = a.frames@0
+    }
+}
+
+;; animations.stop(): the frame on display stays
+func sprite_stop (s) {
+    set s.playing = false
+}
+
+;; Phaser.Animation.update
+func sprite_update (s) {
+    val a = s.cur
+    val now = eng.now()
+    if a && s.playing && (now >= s.next) {
+        var skip = 1
+        var diff = now - s.next
+        if diff > a.delay {
+            set skip = math.floor(diff / a.delay)
+            set diff -= skip * a.delay
+        }
+        set s.next = now + (a.delay - diff)
+        set s.index += skip
+        if s.index >= #a.frames {
+            if a.loop {
+                set s.index = s.index % #a.frames
+                set s.frame = a.frames@(s.index)
+            } else {
+                set s.playing = false       ;; onComplete
+            }
+        } else {
+            set s.frame = a.frames@(s.index)
+        }
+    }
+}
+
+func sprite_draw (s) {
+    if s.visible {
+        eng.draw(s.img, s.frame, s.x, s.y, s.ax, s.ay, s.angle, s.sx, s.sy, s.alpha)
+    }
+}
