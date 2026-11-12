@@ -380,8 +380,10 @@ func collide (b1, b2) {
     separate_axis(b1, b2, :x) || separate_axis(b1, b2, :y)
 }
 
-;; Sprite.inWorld: the bounds of the sprite as drawn, against the world
-func in_world (s) {
+;; Sprite.updateBounds: the bounds of the sprite as drawn in the last frame
+;; (rotated, from the 32-bit transform): left, top, right, bottom. For a
+;; sprite that is not rotated, bottomLeft.y of Phaser is the bottom.
+func sprite_bounds (s) {
     val dx, dy, r, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.drot, s.dsx, s.dsy, s.img.fw, s.img.fh, s.ax, s.ay)
     val out = [0, 0, 0, 0]
     ```
@@ -396,5 +398,11 @@ func in_world (s) {
         a_dec(v);
     }
     ```
-    (out@0 < Physics.w) && (0 < out@2) && (out@1 < Physics.h) && (0 < out@3)
+    (out@0, out@1, out@2, out@3)
+}
+
+;; Sprite.inWorld: the bounds of the sprite as drawn, against the world
+func in_world (s) {
+    val l, t, r, b = sprite_bounds(s)
+    (l < Physics.w) && (0 < r) && (t < Physics.h) && (0 < b)
 }

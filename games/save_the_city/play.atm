@@ -1,0 +1,235 @@
+;; Play: the sentences, the bomb, and the end of the city.
+
+val IMG_BOMB      = eng.image(A ++ "images/bomb.png")
+val IMG_CITY      = eng.image(A ++ "images/city.png", 400, 48)
+val IMG_EXPLOSION = eng.image(A ++ "images/explosion.png")
+val IMG_RESTART   = eng.image(A ++ "images/restart.png")
+val SND_FIRE = eng.sound(A ++ "sounds/fire.wav")
+val SND_EXP  = eng.sound(A ++ "sounds/exp.wav")
+val SND_HIT  = eng.sound(A ++ "sounds/hit.wav")
+
+val SENTENCES = [
+    "type this sentence to start",
+    "great now keep typing",
+    "save the city from the bomb",
+    "the city is being evacuated right now",
+    "so each keystroke is saving lives",
+
+    "oh we have zome kommuncation ichues",
+    "can yu styll haer us",
+    "ze bomb iz cosyng interrrfrances",
+    "kip tyipng ur diong a good zob",
+    "yuo svaed allmoost eevrinoe",
+
+    "quysd skjlij qsiap apzokh z",
+    "faondzakjazhedluyedanljlcquef lol",
+    "- you are not supposed to see this -",
+    " - are you a hacker? - ",
+]
+
+;; the key of a character, as `isDown(charCode - 32)` in the original: the
+;; code of the upper case letter
+func key_of (c) {
+    string.byte(c) - 32
+}
+
+;; a letter: it appears, waits to be fired, flies to the bomb, and dies when
+;; it reaches it (or leaves the top of the screen)
+task Letter (t, i, bomb) {
+    set Save.letters += 1
+    defer {
+        set Save.letters -= 1
+    }
+    set pub = t
+    spawn Motion(t, [alpha=1], 200, nil, nil, i * 20)
+    await :fire until it.i == i
+    eng.play(SND_FIRE, 0.2)
+    spawn Motion(t, [y=bomb.y - 20, x=W/2], (H - bomb.y) * 3)
+    await :update until ((t.y + 20) < 0) || ((t.alpha > 0) && ((t.y + 20) < Save.bomb_bottom))
+    if (t.y + 20) >= 0 {
+        ;; it reached the bomb, which goes up
+        eng.play(SND_HIT, 0.2)
+        emit @:global :hit                  ;; Play pushes the bomb up
+    }
+    set t.alpha = 0
+}
+
+;; shake_effect: nine tweens of the group, chained, relative to where it is
+task Shake (g) {
+    val m, t = (15, 50)
+    loop _, d in [ [-m, t], [m*2, t*2], [-m, t],
+                   [-m, t], [m*2, t*2], [-m, t],
+                   [-m/2, t], [m, t*2], [-m/2, t] ] {
+        await Motion(g, [y=(if d@0 >= 0 => "+" => "") ++ tostring(d@0)], d@1)
+    }
+}
+
+task Play () {
+    val city = Sprite(IMG_CITY, W/2, H - 55)
+    set city.ax, city.ay = (0.5, 1)
+    val bomb = Sprite(IMG_BOMB, W/2, -40)
+    set bomb.ax, bomb.ay = (0.5, 0.5)
+    val body = Body(bomb, :bomb)
+    defer {
+        body_remove(body)
+    }
+    val tuto = Text(W/2, (H/2) - 80, "use your keyboad\nto type the sentence below", 25, 0.5, FONT_MONO)
+    set tuto.ax, tuto.ay = (0.5, 0.5)
+
+    pin letters = tasks()
+    pin tweens = tasks()
+    set Save.level, Save.i, Save.score, Save.dead = (0, 0, 0, false)
+    set Save.bomb, Save.body, Save.tuto, Save.city = (bomb, body, tuto, city)
+
+    ;; a letter reached the bomb: it goes up (a tween of Play, which goes on
+    ;; after the letter)
+    spawn {
+        loop on :hit {
+            spawn @tweens Motion(bomb, [y="-20"], 50)
+        }
+    }
+
+    ;; the bottom of the bomb as drawn (bomb.bottomLeft.y), in preUpdate
+    spawn {
+        loop on :pre {
+            val _, _, _, b = sprite_bounds(bomb)
+            set Save.bomb_bottom = b
+        }
+    }
+
+    ;; the sprites drawn, in the order of the original
+    val texts = []
+    var grp = nil           ;; the group of the city and the explosion, at the end
+    var exp = nil
+    var gone = nil
+    var button = nil
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            if !grp {
+                sprite_draw(city)
+            }
+            if !Save.dead {
+                sprite_draw(bomb)
+            }
+            loop _, l in letters {
+                text_draw(l.pub)
+            }
+            text_draw(tuto)
+            if grp {
+                set exp.oy, city.oy = (grp.y, grp.y)
+                sprite_draw(exp)
+                sprite_draw(city)
+            }
+            if gone {
+                text_draw(gone)
+            }
+            if button {
+                sprite_draw(button)
+            }
+        }
+    }
+
+    ;; draw_sentence: the letters of the next sentence
+    var s = nil
+    val func draw_sentence () {
+        set s = SENTENCES@(Save.level)
+        loop i in #s {
+            val c = string.sub(s, i, i)
+            if c != " " {
+                val offset = ((W - (#s * 13)) / 2) + (i * 13)
+                val t = Text(offset, H - 40, c, 20, 0, FONT_MONO)
+                set t.alpha = 0
+                spawn @letters Letter(t, i, bomb)
+            }
+        }
+        set Save.level += 1
+        if Save.level == 2 {
+            set body.vy = 90
+        }
+    }
+    draw_sentence()
+
+    ;; the update, in the order of the original, until the bomb reaches the
+    ;; city; `reset` is the flag keyReset of the original: a key fires one
+    ;; letter, and must be up before it fires another
+    var reset = false
+    loop on :update {
+        if (Save.level == 1) && (Save.i == 1) {
+            spawn @tweens Motion(tuto, [alpha=0], 500)
+        }
+        if string.sub(s, Save.i, Save.i) == " " {
+            set Save.i += 1
+        }
+        val k = if Save.i < #s => key_of(string.sub(s, Save.i, Save.i)) => nil
+        ifs {
+            k && rl.key_down(k) && !reset => {
+                set reset = true
+                emit @letters :fire [i=Save.i]
+                set Save.i += 1
+                set Save.score += 5
+            }
+            !(k && rl.key_down(k)) => set reset = false
+        }
+        if Save.i == #s {
+            set Save.i = 0
+            draw_sentence()
+        }
+        until bomb.y > (H - 115)
+    }
+
+    ;; end: the city is gone
+    eng.play(SND_EXP, 0.3)
+    set Save.dead = true
+    body_remove(body)
+    abort letters
+    set exp = Sprite(IMG_EXPLOSION, W/2, H - 55)
+    set exp.ax, exp.ay = (0.5, 1)
+    set exp.sx, exp.sy = (0.3, 0.3)
+    set grp = [ y=0 ]
+    spawn @tweens Motion(exp, [alpha=0], 2000, nil, nil, 1500)
+    spawn @tweens Shake(grp)
+    await Motion(exp, [sx=1, sy=1], 500)
+
+    ;; annimation_ended
+    set city.frame = 1
+    set gone = Text(W/2, 100, "the city is gone. you saved " ++ tostring(Save.score) ++ " lives", 18, 0, FONT_MONO)
+    set gone.ax, gone.ay = (0.5, 0)
+    set gone.alpha = 0
+    spawn @tweens Motion(gone, [alpha=1], 1000, nil, nil, 1000)
+    set button = Sprite(IMG_RESTART, W/2, 200)
+    set button.ax, button.ay = (0.5, 0.5)
+    set button.alpha = 0
+    spawn @tweens Motion(button, [alpha=1], 1000, nil, nil, 2000)
+
+    ;; the button: pressed and released over it
+    loop {
+        val d = await :rl.mouse.dn
+        if over(button, d.x, d.y) {
+            val u = await :rl.mouse.up
+            until over(button, u.x, u.y)
+        }
+    }
+}
+
+;; the mouse over a sprite that is not rotated
+func over (s, x, y) {
+    val w, h = (s.img.fw * s.sx, s.img.fh * s.sy)
+    val l, t = (s.x - (s.ax * w), s.y - (s.ay * h))
+    (x >= l) && (x <= (l + w)) && (y >= t) && (y <= (t + h))
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/8.js
+func trace () {
+    val f = rl.frame()
+    if !Save.bomb {
+        return tostring(f) ++ " Play"
+    }
+    tostring(f) ++ " Play " ++ tostring(Save.level) ++ " " ++ tostring(Save.i) ++ " " ++
+        tostring(Save.score) ++ " " ++ eng.fixed(Save.bomb.y, 2) ++ " " ++
+        eng.fixed(Save.body.vy, 2) ++ " " ++ (if Save.dead => "1" => "0") ++ " " ++
+        tostring(Save.letters) ++ " " ++ eng.fixed(Save.tuto.alpha, 3) ++ " " ++
+        tostring(Save.city.frame)
+}
+;; [/trace]

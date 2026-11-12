@@ -1,0 +1,7 @@
+# Save the City: two sentences and a part of the third, typed a letter every 4
+# frames; the bomb falls on the city; the button restarts; a part of the
+# first sentence again.
+FRAMES=982
+SEED=1
+INPUT=10:dn:T,12:up:T,14:dn:Y,16:up:Y,18:dn:P,20:up:P,22:dn:E,24:up:E,26:dn:T,28:up:T,30:dn:H,32:up:H,34:dn:I,36:up:I,38:dn:S,40:up:S,42:dn:S,44:up:S,46:dn:E,48:up:E,50:dn:N,52:up:N,54:dn:T,56:up:T,58:dn:E,60:up:E,62:dn:N,64:up:N,66:dn:C,68:up:C,70:dn:E,72:up:E,74:dn:T,76:up:T,78:dn:O,80:up:O,82:dn:S,84:up:S,86:dn:T,88:up:T,90:dn:A,92:up:A,94:dn:R,96:up:R,98:dn:T,100:up:T,122:dn:G,124:up:G,126:dn:R,128:up:R,130:dn:E,132:up:E,134:dn:A,136:up:A,138:dn:T,140:up:T,142:dn:N,144:up:N,146:dn:O,148:up:O,150:dn:W,152:up:W,154:dn:K,156:up:K,158:dn:E,160:up:E,162:dn:E,164:up:E,166:dn:P,168:up:P,170:dn:T,172:up:T,174:dn:Y,176:up:Y,178:dn:P,180:up:P,182:dn:I,184:up:I,186:dn:N,188:up:N,190:dn:G,192:up:G,214:dn:S,216:up:S,218:dn:A,220:up:A,222:dn:V,224:up:V,226:dn:E,228:up:E,230:dn:T,232:up:T,234:dn:H,236:up:H,238:dn:E,240:up:E,242:dn:C,244:up:C,246:dn:I,248:up:I,870:mv:250:200,872:md:0,874:mu:0,890:dn:T,892:up:T,894:dn:Y,896:up:Y,898:dn:P,900:up:P,902:dn:E,904:up:E,906:dn:T,908:up:T,910:dn:H,912:up:H,914:dn:I,916:up:I,918:dn:S,920:up:S
+SHOTS="100 370 869 952"
