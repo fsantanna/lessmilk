@@ -1,2 +1,3 @@
-;; math.atan(y, x) ignores x (compiler.md); math.atan2(y, x) is the angle.
+;; math.atan(y, x) is the angle of the point (x, y), as in Lua 5.4 (fixed in
+;; ceu-atmos); math.atan2(y, x) the same.
 print(math.atan(1, 2), math.atan2(1, 2))

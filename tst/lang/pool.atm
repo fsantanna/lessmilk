@@ -1,5 +1,5 @@
-;; Aborting the tasks of a pool while iterating over it skips some (compiler.md);
-;; `abort ts` aborts all of them, and the pool can be used again.
+;; Aborting the tasks of a pool while iterating over it aborts all of them
+;; (fixed in ceu-atmos c467e60); `abort ts` too, and the pool can be used again.
 task T (i) {
     defer { print("end", i) }
     await false
