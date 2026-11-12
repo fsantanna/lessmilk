@@ -151,9 +151,10 @@ func sprite_draw (s) {
 ;;      val t = Text(175, 300, "use the arrow keys", 20)
 ;;      set t.ay = 1
 ;;      text_draw(t)
-func Text (x, y, s, size, align) {
+func Text (x, y, s, size, align, font) {
     :Text [
         x = x, y = y, s = s, size = size,
+        font = font || FONT_SANS,
         ax = 0, ay = 0, alpha = 1, visible = true,
         align = align || 0,         ;; 0 left, 0.5 center, 1 right
         color = 0xFFFFFFFF,
@@ -162,6 +163,6 @@ func Text (x, y, s, size, align) {
 
 func text_draw (t) {
     if t.visible {
-        eng.text(t.s, t.x, t.y, t.size, t.color, t.ax, t.ay, t.align, t.alpha)
+        eng.text(t.s, t.x + (t.ox || 0), t.y + (t.oy || 0), t.size, t.color, t.ax, t.ay, t.align, t.alpha, t.font)
     }
 }

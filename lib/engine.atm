@@ -141,7 +141,7 @@ static double rdg_frac (void) {
 static struct { char* path; int size; Font font; } eng_fonts[ENG_MAX];
 static int eng_nfonts = 0;
 
-static Font* eng_font (const char* path, int size) {
+static Font* eng_font (const char* path, int size, double scale) {
     for (int i=0; i<eng_nfonts; i++) {
         if (eng_fonts[i].size==size && strcmp(eng_fonts[i].path, path)==0) {
             return &eng_fonts[i].font;
@@ -151,8 +151,8 @@ static Font* eng_font (const char* path, int size) {
         return NULL;
     }
     // raylib scales a TTF so that ascent+descent is the size; the browser,
-    // so that the em is: 2288/2048 for Liberation Sans
-    Font f = LoadFontEx(path, (int)round(size * 2288.0/2048), NULL, 0);
+    // so that the em is: (ascent+descent)/em
+    Font f = LoadFontEx(path, (int)round(size * scale), NULL, 0);
     SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
     eng_fonts[eng_nfonts].path = strdup(path);
     eng_fonts[eng_nfonts].size = size;
@@ -161,20 +161,22 @@ static Font* eng_font (const char* path, int size) {
 }
 
 // The height of a line of text, as Pixi measures it in the browser (a div
-// with an "M"): the ascent, descent, and gap of Liberation Sans (1854, 434,
-// and 67 of 2048 units), each rounded, as Chromium does. Measured in the
-// container for 18 sizes from 10 to 80 px: the same.
-static double eng_line_height (int size) {
-    return round(size * 1854.0/2048) + round(size * 434.0/2048) + round(size * 67.0/2048);
+// with an "M"): the ascent, descent, and gap of the font (hhea, in units of
+// the em), each rounded, as Chromium does. Measured in the container for
+// Liberation Sans (Arial) at 18 sizes from 10 to 80 px, and for Liberation
+// Mono (Courier) at 13: the same.
+static double eng_line_height (int size, double asc, double desc, double gap, double upem) {
+    return round(size * asc/upem) + round(size * desc/upem) + round(size * gap/upem);
 }
 
 // The text, line by line, each line aligned in the box of the widest one
 // (align: 0 left, 0.5 center, 1 right), and the box with its anchor (ax,ay)
 // at (x,y). Returns the width of the box, and draws only if "draw".
-static double eng_text (const char* path, int size, const char* s,
+static double eng_text (const char* path, double asc, double desc, double gap,
+                        double upem, int size, const char* s,
                         double x, double y, double ax, double ay,
                         double align, Color c, double alpha, int draw) {
-    Font* f = eng_font(path, size);
+    Font* f = eng_font(path, size, (asc + desc) / upem);
     if (f == NULL) {
         return 0;
     }
@@ -195,7 +197,7 @@ static double eng_text (const char* path, int size, const char* s,
         double lw = MeasureTextEx(*f, lines[i], (float)f->baseSize, 0).x;
         if (lw > w) w = lw;
     }
-    double lh = eng_line_height(size);
+    double lh = eng_line_height(size, asc, desc, gap, upem);
     w = (int)w;                 // the width of the canvas of a text in Pixi
     double h = lh * n;
     if (draw) {
@@ -215,10 +217,13 @@ static double eng_text (const char* path, int size, const char* s,
 
 ```
 
-;; The font of the originals: they ask for Arial, which the browser draws
-;; with Liberation Sans, a font with the same metrics. Paths are relative to
-;; the root of the repository, where the games run.
-val ENG_FONT = "lib/fonts/LiberationSans-Regular.ttf"
+;; The fonts of the originals: they ask for Arial and Courier, which the
+;; browser draws with Liberation Sans and Liberation Mono, fonts with the
+;; same metrics (lib/fonts/, SIL OFL 1.1). Each with its hhea metrics: ascent,
+;; descent, line gap, and units per em. Paths are relative to the root of the
+;; repository, where the games run.
+val FONT_SANS = [ path="lib/fonts/LiberationSans-Regular.ttf", asc=1854, desc=434, gap=67, upem=2048 ]
+val FONT_MONO = [ path="lib/fonts/LiberationMono-Regular.ttf", asc=1705, desc=615, gap=0,  upem=2048 ]
 
 ;; the images and sounds, by path
 val ENG_IMAGES = []
@@ -308,20 +313,23 @@ val eng = [
             x, y, w, h, (ax || 0) * w, (ay || 0) * h, angle || 0, 0xFFFFFF00 | a)
     },
 
-    ;; eng.text(s, x, y, size, [color, ax, ay, align, alpha]): draws the text
-    ;; with its anchor at (x,y); lines are aligned by `align` (0 to 1)
-    text = func (s, x, y, size, color, ax, ay, align, alpha) {
+    ;; eng.text(s, x, y, size, [color, ax, ay, align, alpha, font]): draws
+    ;; the text with its anchor at (x,y); lines are aligned by `align` (0 to
+    ;; 1); FONT_SANS by default
+    text = func (s, x, y, size, color, ax, ay, align, alpha, font) {
         val c = color || 0xFFFFFFFF
         val ax_, ay_, al_ = (ax || 0, ay || 0, align || 0)
         val a = if alpha == nil => 1 => alpha
-        val f = ENG_FONT
-        `eng_text(rl_s($f), (int)a_dbl($size), rl_s($s), a_dbl($x), a_dbl($y), a_dbl($ax_), a_dbl($ay_), a_dbl($al_), rl_color($c), a_dbl($a), 1);`
+        val f = font || FONT_SANS
+        val p, as, ds, gp, em = (f.path, f.asc, f.desc, f.gap, f.upem)
+        `eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), a_dbl($x), a_dbl($y), a_dbl($ax_), a_dbl($ay_), a_dbl($al_), rl_color($c), a_dbl($a), 1);`
     },
 
-    ;; eng.measure(s, size): the width of the text
-    measure = func (s, size) {
-        val f = ENG_FONT
-        `:number eng_text(rl_s($f), (int)a_dbl($size), rl_s($s), 0, 0, 0, 0, 0, WHITE, 1, 0)`
+    ;; eng.measure(s, size, [font]): the width of the text
+    measure = func (s, size, font) {
+        val f = font || FONT_SANS
+        val p, as, ds, gp, em = (f.path, f.asc, f.desc, f.gap, f.upem)
+        `:number eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), 0, 0, 0, 0, 0, WHITE, 1, 0)`
     },
 
     ;; eng.sound(path): a sound, loaded once per path (rl.sound); with no
