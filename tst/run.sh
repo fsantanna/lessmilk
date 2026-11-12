@@ -15,6 +15,17 @@ FAIL=0
 ok ()   { echo "ok   $1"; }
 fail () { echo "FAIL $1"; FAIL=1; }
 
+# the semantics of the compiler that the port relies on (doc/compiler.md)
+for t in tst/lang/*.atm; do
+    n=$(basename $t .atm)
+    ATMOS_HOME=ext/ceu-atmos ext/ceu-atmos/atmos $t > "$OUT/lang-$n.out" 2>&1
+    if diff -u tst/lang/$n.out "$OUT/lang-$n.out"; then
+        ok "lang $n"
+    else
+        fail "lang $n"
+    fi
+done
+
 # the environment
 tools/atmos.sh tst/env/hello.atm "$OUT/hello" || fail "hello (build)"
 (cd "$OUT" && RL_FRAMES=70 RL_SHOT=2:hello.png ./hello 2>/dev/null) > "$OUT/hello.out"

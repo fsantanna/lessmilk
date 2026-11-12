@@ -8,7 +8,7 @@ maintains it. Nothing here blocked the port.
 
 1. **The order in which tasks awake on the same event.** The tasks in a
    pool (or nested in a task) awake before the body of the task that holds
-   them: in a test (`out/chk/emit.atm` in the history of this document),
+   them: in a test (`tst/lang/order.atm`),
    a task in the pool of `E` received an event before the body of `E`. Box
    Jump depends on it: a task spawned by `Play` and awaiting `:update`
    awoke before the body of `Play`, which did `collide` in the same
@@ -17,7 +17,8 @@ maintains it. Nothing here blocked the port.
    uses the phases of `lib/game.atm` (`:pre`, `:particles`, `:update`,
    `:overlap`) between tasks. The manual does not say this order. Is it
    guaranteed?
-2. **A task that starts during an emit does not receive it.** Checked: a
+2. **A task that starts during an emit does not receive it.** Checked
+   (`tst/lang/order.atm`): a
    task spawned in a pool during an emit of `:X` awoke on the next `:X`
    only. The port relies on it (`Motion`, the particles). The manual does
    not say it.
@@ -46,6 +47,7 @@ maintains it. Nothing here blocked the port.
 
 7. **Aborting the tasks of a pool while iterating over it skips some.**
    `loop _, t in ts { abort t }` over a pool of two tasks aborted the first
+   (`tst/lang/pool.atm`)
    only: the second was skipped, as when an element is removed from a list
    that is being iterated. `abort ts` aborts all of them, and the pool can
    be used again (Box Jump does this between levels). An error, or an

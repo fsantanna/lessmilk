@@ -1,0 +1,28 @@
+;; What the port relies on: the tasks of a pool awake before the body of the
+;; task that holds them, and a task spawned during an emit does not receive it.
+task P (i) {
+    print("spawned", i)
+    loop {
+        val e = await :X
+        print("P", i, "got", e.n)
+    }
+}
+task E () {
+    pin ps = tasks()
+    loop e on :X {
+        print("E got", e.n)
+        if e.n == 1 {
+            spawn @ps P(1)
+        }
+    }
+}
+spawn E()
+spawn {
+    loop e on :X {
+        if e.n == 1 {
+            spawn P(2)
+        }
+    }
+}
+emit @:global :X [n=1]
+emit @:global :X [n=2]

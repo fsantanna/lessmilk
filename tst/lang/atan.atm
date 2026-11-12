@@ -1,0 +1,2 @@
+;; math.atan(y, x) ignores x (compiler.md); math.atan2(y, x) is the angle.
+print(math.atan(1, 2), math.atan2(1, 2))

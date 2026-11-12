@@ -1,0 +1,18 @@
+;; Aborting the tasks of a pool while iterating over it skips some (compiler.md);
+;; `abort ts` aborts all of them, and the pool can be used again.
+task T (i) {
+    defer { print("end", i) }
+    await false
+}
+pin ts = tasks()
+spawn @ts T(1)
+spawn @ts T(2)
+loop _, t in ts {
+    abort t
+}
+print("after loop", #ts)
+spawn @ts T(3)
+abort ts
+print("after abort pool")
+spawn @ts T(4)
+print("spawned after abort", #ts)
