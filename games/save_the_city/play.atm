@@ -65,6 +65,7 @@ task Shake (g) {
 }
 
 task Play () {
+    input_reset()
     val city = Sprite(IMG_CITY, W/2, H - 55)
     set city.ax, city.ay = (0.5, 1)
     val bomb = Sprite(IMG_BOMB, W/2, -40)
@@ -163,13 +164,13 @@ task Play () {
         }
         val k = if Save.i < #s => key_of(string.sub(s, Save.i, Save.i)) => nil
         ifs {
-            k && rl.key_down(k) && !reset => {
+            k && key_down(k) && !reset => {
                 set reset = true
                 emit @letters :fire [i=Save.i]
                 set Save.i += 1
                 set Save.score += 5
             }
-            !(k && rl.key_down(k)) => set reset = false
+            !(k && key_down(k)) => set reset = false
         }
         if Save.i == #s {
             set Save.i = 0

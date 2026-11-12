@@ -1,0 +1,282 @@
+;; Play: a grid of 6 x 6 dots of four colors, from a group of 70.
+
+val IMG_BAR      = eng.image(A ++ "images/bar.png")
+val IMG_PROGRESS = eng.image(A ++ "images/progress.png")
+val IMG_TUTO     = eng.image(A ++ "images/tuto.png")
+val IMG_QUESTION = eng.image(A ++ "images/question.png")
+val SND_TAP2 = eng.sound(A ++ "sounds/tap2.wav")
+val SND_TAP3 = eng.sound(A ++ "sounds/tap3.wav")
+val TILE = 60
+
+;; rand(num) of the original
+func rand (n) {
+    eng.rand(n)
+}
+
+;; the dots that grow, are removed, or fall, and the bar
+task Tween (o, to, ms, delay) {
+    await Motion(o, to, ms, nil, nil, delay)
+}
+
+task Play () {
+    input_reset()
+    val dots = Group(IMG_DOT, 70, :dot)
+    val label_score = Text(40, 20, "0", 20)
+    val label_moves = Text(W - 75, 20, "0/20", 20)
+    loop _, t in [label_score, label_moves] {
+        set t.color = INK
+    }
+    val progress = Sprite(IMG_PROGRESS, W/2, H - 50)
+    set progress.ax, progress.ay = (0, 0.5)
+    val bar = Sprite(IMG_BAR, W/2, H - 50)
+    set bar.ax, bar.ay = (0.5, 0.5)
+    prop_set(progress, "width", 0)
+    set progress.x -= IMG_BAR.fw / 2
+    val question = Sprite(IMG_QUESTION, W/2, 30)
+    set question.ax, question.ay = (0.5, 0.5)
+    var tuto = nil
+    pin tweens = tasks()
+    defer {
+        group_remove(dots)
+    }
+
+    var clicked, count, moves, type = (false, 0, 0, -1)
+    var deleted = []
+    var pos_i, pos_j = (-1, -1)
+    val offset_x = ((W - (6 * TILE)) / 2) + (TILE / 2)
+    val offset_y = 80
+    var next_time = 0
+    set score = 0
+
+    ;; [trace]
+    set Con.play = [ dots=dots, progress=progress,
+                     moves=\{ moves }, count=\{ count }, type=\{ type } ]
+    ;; [/trace]
+
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            group_draw(dots)
+            text_draw(label_score)
+            text_draw(label_moves)
+            sprite_draw(progress)
+            sprite_draw(bar)
+            sprite_draw(question)
+            if tuto && tuto.visible {
+                sprite_draw(tuto)
+            }
+        }
+    }
+
+    ;; the question: a picture over the game, until clicked
+    spawn {
+        loop {
+            await Button(question)
+            set tuto = Sprite(IMG_TUTO, 0, 0)
+            await Button(tuto)
+            set tuto.visible = false
+        }
+    }
+
+    val func width_bar () { prop_get(progress, "width") / 28 }
+
+    val func add_dot (i, j, first) {
+        val x = group_first_dead(dots)
+        val d = x.s
+        val r = rand(4)
+        set d.frame = r * 2
+        set d.ax, d.ay = (0.5, 0.5)
+        set d.selected = false
+        set d.pos_i, d.pos_j = (i, j)
+        set d.move_y = 0
+        body_set_size(x.b, 30, 30, 0, 0)
+        set d.alpha = 1
+        set d.sx, d.sy = (0.01, 0.01)
+        set d.alive2 = true
+        sprite_reset(d, x.b, offset_x + (j * TILE), offset_y + (i * TILE))
+        if first {
+            spawn @tweens Tween(d, [sx=1, sy=1], 400, (j * 100) + 1)
+        } else {
+            spawn @tweens Tween(d, [sx=1, sy=1], 400, 400)
+        }
+    }
+
+    val func clear_bar () {
+        spawn @tweens Tween(progress, [width=0], 300)
+    }
+
+    val func unselect_all () {
+        set count = 0
+        loop _, x in dots.slots {
+            if x.s.alive && x.s.selected {
+                set x.s.selected = false
+                set x.s.frame -= 1
+            }
+        }
+        clear_bar()
+    }
+
+    val func in_range (d) {
+        if pos_j == -1 {
+            return true
+        }
+        ((pos_j - 1) == d.pos_j && (pos_i == d.pos_i)) ||
+        (((pos_j + 1) == d.pos_j) && (pos_i == d.pos_i)) ||
+        ((pos_j == d.pos_j) && ((pos_i - 1) == d.pos_i)) ||
+        ((pos_j == d.pos_j) && ((pos_i + 1) == d.pos_i))
+    }
+
+    val func select (d) {
+        if sound {
+            ifs {
+                width_bar() <= 3 => eng.play(SND_TAP1, 0.5)
+                width_bar() <= 7 => eng.play(SND_TAP2, 0.7)
+                else => eng.play(SND_TAP3, 0.9)
+            }
+        }
+        set d.selected = true
+        set d.frame += 1
+        set count += 1
+        set pos_j, pos_i = (d.pos_j, d.pos_i)
+        if width_bar() <= 11 {
+            spawn @tweens Tween(progress, [width="+28"], 100)
+        }
+    }
+
+    ;; try_select_a_dot: the dots under the pointer, in the order of the group
+    val func try_select () {
+        val px, py = (pointer_x(), pointer_y())
+        loop _, x in dots.slots {
+            val e = x.s
+            if e.alive && !e.selected && contains(x.b, px, py) {
+                if type == -1 {
+                    set type = e.frame
+                }
+                if (type == e.frame) && in_range(e) {
+                    select(e)
+                } else {
+                    unselect_all()
+                }
+            }
+        }
+    }
+
+    val func remove_selected () {
+        loop _, x in dots.slots {
+            val e = x.s
+            if e.alive && e.selected {
+                spawn @tweens Tween(e, [sx=2, sy=2], 300)
+                spawn @tweens Tween(e, [alpha=0], 300)
+                set deleted@+ = [i=e.pos_i, j=e.pos_j]
+                set e.alive2 = false
+            }
+        }
+    }
+
+    val func move_down () {
+        loop _, del in deleted {
+            loop _, x in dots.slots {
+                val e = x.s
+                if e.alive && !e.selected && (e.pos_j == del.j) && (e.pos_i < del.i) {
+                    set e.move_y += TILE
+                }
+            }
+        }
+        loop _, x in dots.slots {
+            val e = x.s
+            if e.alive && (e.move_y != 0) {
+                val coef = e.move_y / TILE
+                set e.pos_i += coef
+                spawn @tweens Tween(e, [y=e.y + e.move_y], 100 * coef, 100)
+                set e.move_y = 0
+            }
+        }
+        set deleted = []
+    }
+
+    val func add_missing () {
+        val min = [6, 6, 6, 6, 6, 6]
+        loop _, x in dots.slots {
+            val e = x.s
+            if e.alive && (e.pos_i < min@(e.pos_j)) && e.alive2 {
+                set min@(e.pos_j) = e.pos_i
+            }
+        }
+        loop i in 6 {
+            loop j in min@(i) {
+                add_dot(j, i, false)
+            }
+        }
+    }
+
+    val func multiplier () {
+        ifs {
+            width_bar() <= 4 => 1
+            width_bar() <= 8 => 5
+            else => 10
+        }
+    }
+
+    ;; build_world
+    loop i in 6 {
+        loop j in 6 {
+            add_dot(i, j, true)
+        }
+    }
+
+    loop on :update {
+        loop _, x in dots.slots {
+            if x.s.alive && (x.s.sx == 2) {
+                sprite_kill(x.s)
+            }
+        }
+        if pointer_down() && (eng.now() > next_time) {
+            set clicked = true
+            try_select()
+        }
+        if !pointer_down() && clicked {
+            if count > 1 {
+                remove_selected()
+                move_down()
+                add_missing()
+                ;; update_score_and_labels
+                if sound { eng.play(SND_COMBO, 0.4) }
+                set moves += 1
+                set label_moves.s = tostring(moves) ++ "/20"
+                set score += count * multiplier()
+                set label_score.s = tostring(score)
+                clear_bar()
+                until moves == 20
+            } else {
+                unselect_all()
+            }
+            set next_time = eng.now() + 300
+            set count, clicked, type = (0, false, -1)
+            set pos_i, pos_j = (-1, -1)
+        }
+    }
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/7.js
+func trace () {
+    val f = rl.frame()
+    if screen != "Play" {
+        return tostring(f) ++ " " ++ screen ++ " " ++ tostring(score)
+    }
+    val p = Con.play
+    var n, fr, sy, sc = (0, 0, 0, 0)
+    loop _, x in p.dots.slots {
+        if x.s.alive {
+            set n += 1
+            set fr += x.s.frame
+            set sy += x.s.y
+            set sc += x.s.sx
+        }
+    }
+    tostring(f) ++ " Play " ++ tostring(score) ++ " " ++ tostring(p.moves()) ++ " " ++
+        tostring(p.count()) ++ " " ++ tostring(p.type()) ++ " " ++
+        eng.fixed(prop_get(p.progress, "width"), 2) ++ " " ++ tostring(n) ++ " " ++
+        tostring(fr) ++ " " ++ eng.fixed(sy, 2) ++ " " ++ eng.fixed(sc, 3)
+}
+;; [/trace]

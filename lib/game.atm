@@ -46,6 +46,27 @@ func cursor_down (c, k) {
     rl.key_down(k) && ((Keys.pressed@(k) || -1) > c.born)
 }
 
+;; input.reset, which Phaser 1.1.3 does when a state starts (World.destroy):
+;; all keys up, the pointer up, the camera at 0. A key or a button held from
+;; the state before counts again only once pressed again. A screen of a port
+;; calls input_reset() when it starts, as a state does.
+val Input = [ reset = -1, mouse = -1 ]
+
+func input_reset () {
+    set Input.reset = Keys.frame
+    set Camera.x, Camera.y = (0, 0)
+}
+
+;; game.input.keyboard.isDown(k), since the last reset
+func key_down (k) {
+    rl.key_down(k) && ((Keys.pressed@(k) || -1) > Input.reset)
+}
+
+;; game.input.activePointer.isDown, since the last reset
+func pointer_down () {
+    rl.mouse_down(0) && (Input.mouse > Input.reset)
+}
+
 task Wait (ms) {
     val t = eng.now() + ms
     await :update until eng.now() > t
@@ -58,8 +79,16 @@ task Game (w, h) {
     set Camera.w, Camera.h = (w, h)
     spawn {
         loop e on :rl.key.dn {
+            set Keys.pressed@(e.key) = Keys.frame + 1           ;; by code
             if e.name {
-                set Keys.pressed@(e.name) = Keys.frame + 1
+                set Keys.pressed@(e.name) = Keys.frame + 1      ;; and by name
+            }
+        }
+    }
+    spawn {
+        loop e on :rl.mouse.dn {
+            if e.button == 0 {
+                set Input.mouse = Keys.frame + 1
             }
         }
     }

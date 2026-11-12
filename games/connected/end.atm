@@ -1,0 +1,28 @@
+;; End: the score of the twenty moves; dots fall; a click plays again.
+
+task End () {
+    input_reset()
+    val text = Text(W/2, H/2, "you ended your 20 turns\n\nyou scored: " ++ tostring(score) ++
+                    "\nyour best score: " ++ tostring(best_score), 30, 0.5)
+    set text.ax, text.ay, text.color = (0.5, 0.5, INK)
+    if score > best_score {
+        set best_score = score          ;; localStorage: in memory here
+    }
+    val restart = Text(W/2, H - 50, "click anywhere to restart", 20)
+    set restart.ax, restart.ay, restart.color = (0.5, 0.5, INK)
+    set restart.angle = 0
+    spawn Swing(restart, 300)
+    val emitter = Emitter(IMG_DOT, 100)
+    set emitter.x, emitter.y = (W/2, -200)
+    spawn Emitter_run(emitter)
+    emitter_start(emitter, false, 5000, 200)
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            text_draw(text)
+            text_draw(restart)
+            emitter_draw(emitter)
+        }
+    }
+    await :update until pointer_down()
+}

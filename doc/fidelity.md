@@ -167,6 +167,13 @@ What Phaser 1.1.3 does there, and the port copies:
   with the camera of the time it reads it (`camera.x + transform`): when the
   camera shakes, the bodies shift with it. Setting `camera.x` keeps it in
   the bounds of the world and floors it.
+- **Input when a state starts.** `World.destroy`, called when a state
+  starts, calls `input.reset`: all keys up (`keyboard.isDown`), the
+  pointer up, and the camera back at 0. A key or a button held from the
+  state before counts only once pressed again: the click that ends the
+  last screen of Connected is not a press in the next game. A screen of a
+  port calls `input_reset()` when it starts, and reads the keys and the
+  pointer with `key_down`, `pointer_down`, or `Cursor`.
 - **Traces.** `Number.toFixed` rounds a tie up (3.375 gives "3.38");
   `printf` rounds it to even. `eng.fixed` does as JavaScript.
 - **Angles.** A sprite keeps its rotation in radians; `angle` is wrapped to
@@ -340,3 +347,24 @@ of the jump from `Math.random` there, as the original.
 The text that pulses (a tween of the scale of a text) is drawn larger by
 raylib, where Pixi scales the picture of the text: the same size, drawn
 differently.
+
+## 7. Connected
+
+The same as the original on its two runs, line by line (`tst/connected/`):
+
+| Run | Frames | Seed | Input | Games |
+|-----|-------:|-----:|-------|------:|
+| `play` | 5277 | 2 | the two dots of the menu; paths of 1 to 4 steps from a dot at random (Python's generator, seed 7) | 1 (8 moves) |
+| `pairs` | 7756 | 12 | pairs of neighbor dots at random (seed 70), until the 20 moves, the end, a click | 2 |
+
+Trace: frame, state, score; in Play, the moves, the dots selected, the
+type of the move, the width of the bar, and the dots alive (how many, the
+sums of their frames, of their y, and of their scale).
+
+What it took: the pointer polled in each update (`activePointer.isDown`,
+`Rectangle.contains` of a body, with its edges); a tween of `width`, which
+Phaser turns into a scale; the reset of the input when a state starts
+(above); the emitter of End, which emits every 200 ms for ever. The best
+score is kept in `localStorage` by the original; the port keeps it in
+memory (each run of the harness starts with an empty storage, so the runs
+are the same).

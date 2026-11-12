@@ -1,0 +1,99 @@
+;; Menu: connect the two dots to start.
+
+val IMG_DOT   = eng.image(A ++ "images/dot.png", 50, 50)
+val IMG_SOUND = eng.image(A ++ "images/sound.png", 28, 22)
+val SND_TAP1  = eng.sound(A ++ "sounds/tap1.wav")
+val SND_COMBO = eng.sound(A ++ "sounds/combo.wav")
+
+;; the pointer (game.input.activePointer)
+func pointer_x () { rl.mouse_x() }
+func pointer_y () { rl.mouse_y() }
+
+;; Phaser.Rectangle.contains(body, x, y): the edges included
+func contains (b, x, y) {
+    (x >= b.x) && (x <= (b.x + b.w)) && (y >= b.y) && (y <= (b.y + b.h))
+}
+
+;; a swing of an angle, for ever: .to(1).to(-1).loop()
+task Swing (t, ms) {
+    loop {
+        await Motion(t, [angle=1], ms)
+        await Motion(t, [angle=-1], ms)
+    }
+}
+
+;; a button: pressed and released over it (the box of its frame)
+func over (s, x, y) {
+    val w, h = (s.img.fw * s.sx, s.img.fh * s.sy)
+    val l, t = (s.x - (s.ax * w), s.y - (s.ay * h))
+    (x >= l) && (x <= (l + w)) && (y >= t) && (y <= (t + h))
+}
+task Button (s) {
+    loop {
+        val d = await :rl.mouse.dn
+        if over(s, d.x, d.y) {
+            val u = await :rl.mouse.up
+            until over(s, u.x, u.y)
+        }
+    }
+}
+
+task Menu () {
+    input_reset()
+    val title = Text(W/2, 50, "connected", 30)
+    val start = Text(W/2, H - 50, "connect the two dots to start", 20)
+    loop _, t in [title, start] {
+        set t.ax, t.ay, t.color = (0.5, 0.5, INK)
+    }
+    set start.angle = 0
+    val dot1 = Sprite(IMG_DOT, (W/2) - 25, H/2)
+    val dot2 = Sprite(IMG_DOT, (W/2) + 25, H/2)
+    val b1, b2 = (Body(dot1, :dot), Body(dot2, :dot))
+    loop _, d in [dot1, dot2] {
+        set d.ax, d.ay = (0.5, 0.5)
+    }
+    val snd_btn = Sprite(IMG_SOUND, W - 70, 40)
+    defer {
+        body_remove(b1)
+        body_remove(b2)
+    }
+    spawn Swing(start, 300)
+    spawn {
+        loop {
+            await Button(snd_btn)
+            set snd_btn.frame = if snd_btn.frame == 0 => 1 => 0
+            set sound = snd_btn.frame == 0
+        }
+    }
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            text_draw(title)
+            text_draw(start)
+            sprite_draw(dot1)
+            sprite_draw(dot2)
+            sprite_draw(snd_btn)
+        }
+    }
+    loop on :update {
+        val x, y = (pointer_x(), pointer_y())
+        val in1, in2 = (contains(b1, x, y), contains(b2, x, y))
+        if pointer_down() {
+            if (dot1.frame == 0) && in1 {
+                set dot1.frame += 1
+                if sound { eng.play(SND_TAP1, 0.5) }
+            }
+            if (dot2.frame == 0) && in2 {
+                set dot2.frame += 1
+                if sound { eng.play(SND_TAP1, 0.5) }
+            }
+        } else {
+            if (dot1.frame == 0) || (dot2.frame == 0) {
+                set dot1.frame, dot2.frame = (0, 0)
+            } else {
+                if sound { eng.play(SND_COMBO, 0.5) }
+                break
+            }
+        }
+    }
+}

@@ -60,12 +60,18 @@ func angle_set (s, v) {
 
 ;; a field of a sprite, for Motion: `angle` through angle_get and angle_set
 ;; and the camera, whose x and y are set as its setter does (camera_set)
+;; and sprite.width, as scale.x * the width of a frame
 func prop_get (o, k) {
-    if (k == "angle") && (o ?? :Sprite) => angle_get(o) => o@(k)
+    ifs {
+        (k == "angle") && (o ?? :Sprite) => angle_get(o)
+        (k == "width") && (o ?? :Sprite) => o.sx * o.img.fw
+        else => o@(k)
+    }
 }
 func prop_set (o, k, v) {
     ifs {
         (k == "angle") && (o ?? :Sprite) => angle_set(o, v)
+        (k == "width") && (o ?? :Sprite) => set o.sx = v / o.img.fw
         o ?? :Camera => camera_set(k, v)
         else => set o@(k) = v
     }

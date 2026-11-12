@@ -90,6 +90,16 @@ the indexes, and the units change everywhere.
   the jumps and the falls that they give; the penguins are a group of 40
   recycled sprites, and the camera shakes as Phaser's.
 
+## 7. Connected
+
+- The student's version is one file (`main.atm`, 349 lines), with a task
+  per dot (`Dot`), which grows, waits to be selected, and falls; the
+  selection follows the mouse with events.
+- The port keeps the dots as a group of 70 slots, as the original, since
+  the move is decided over all of them in each update (the dots under the
+  pointer, in the order of the group), and the selection reads the pointer
+  in each update, as `activePointer` is read.
+
 ## 8. Save the City
 
 - The student's version has a task per letter as well (`letter.atm`), and
