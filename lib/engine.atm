@@ -82,6 +82,48 @@ static void js_tostring (double x, char* out) {
     }
 }
 
+// Number.prototype.toFixed(n): of the two nearest numbers with n decimals,
+// the larger when x is exactly between them (in magnitude: the sign goes
+// apart). printf rounds such a tie to even (3.375 -> "3.37"; JavaScript
+// gives "3.38"). The digits of the double are exact (glibc), and the tie is
+// a 5 followed by zeros.
+static void js_tofixed (double x, int n, char* out) {
+    static char buf[512];
+    if (!(fabs(x) < 1e21)) {                // and NaN: as toString
+        js_tostring(x, out);
+        return;
+    }
+    int neg = (x < 0);
+    double a = neg ? -x : x;
+    snprintf(buf, sizeof(buf), "%.400f", a);
+    char* dot = strchr(buf, '.');
+    int ip = (int)(dot - buf);              // digits of the integer part
+    // digits: integer part, then n decimals, then the rest
+    char d[512]; int k = 0;
+    for (int i=0; i<ip; i++) d[k++] = buf[i];
+    for (int i=0; i<n; i++) d[k++] = dot[1+i];
+    const char* rest = dot + 1 + n;
+    int up = (rest[0] > '5');
+    if (rest[0] == '5') {
+        up = 1;                             // a tie, or more: up, as JavaScript
+    }
+    if (up) {
+        int i = k - 1;
+        while (i >= 0) {
+            if (d[i] == '9') { d[i] = '0'; i--; }
+            else { d[i]++; break; }
+        }
+        if (i < 0) {                        // all were 9: one more digit
+            memmove(d+1, d, k); d[0] = '1'; k++; ip++;
+        }
+    }
+    char* o = out;
+    if (neg) *o++ = '-';                    // "-0.00" for -0.001, as JavaScript
+    memcpy(o, d, ip); o += ip;
+    if (n > 0) { *o++ = '.'; memcpy(o, d+ip, n); o += n; }
+    *o = '\0';
+}
+
 static double rdg_c = 1, rdg_s0 = 0, rdg_s1 = 0, rdg_s2 = 0;
 
 static double rdg_hash_s (const char* data) {
@@ -304,7 +346,7 @@ val eng = [
 
     ;; eng.fixed(x, n): x with n decimals, as Number.toFixed in the traces
     fixed = func (x, n) {
-        string.format("%." ++ tostring(n) ++ "f", x)
+        `:string ({ static char b[600]; js_tofixed(a_dbl($x), (int)a_dbl($n), b); b; })`
     },
 
     ;; eng.image(path, [fw, fh]): an image, or a sheet of frames of fw x fh;

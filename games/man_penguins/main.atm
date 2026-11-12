@@ -1,0 +1,40 @@
+;; Man vs Penguins (lessmilk.com, game #4, 2014), by Thomas Palef.
+;; Ported to Atmos from the original (Phaser 1.1.3) and from the port of
+;; Jessica Oliveira (jessicacoliveira/atmos-lessmilk, man_penguins).
+;;
+;; A platformer on one screen: take the coins, jump on the penguins; a
+;; penguin that touches the man, or a fall, kills him, and he starts again.
+
+include "../../lib/game.atm"
+
+val W, H = (500, 350)
+val BG = 0x1BB7FFFF
+val A = "assets/4/"
+
+;; [trace]
+var screen = "Menu"
+val Pen = [ play = nil ]
+;; [/trace]
+
+rl.window [title="Man vs Penguins", width=W, height=H]
+
+include "menu.atm"
+include "play.atm"
+
+spawn Game(W, H)
+
+;; [trace]
+spawn {
+    if os.getenv("RL_FRAMES") {
+        loop on :rl.frame {
+            print(trace())
+        }
+    }
+}
+;; [/trace]
+
+await Menu()
+;; [trace]
+set screen = "Play"
+;; [/trace]
+await Play()

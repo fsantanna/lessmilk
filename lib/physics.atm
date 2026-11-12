@@ -255,18 +255,20 @@ func compute_velocity (axis, b, v, acc, drag, max) {
 }
 
 ;; ArcadePhysics.updateMotion: half of the change of velocity before the
-;; move, half after
+;; move, half after. As in phaser113.min.js, which the games run: the
+;; minifier wrote `(cv - v) * dt * 0.5 * 60` of the source as
+;; `60 * .5 * (cv - v) * dt`, which rounds differently: (30 * (cv - v)) * dt.
 func update_motion (b) {
     val dt = Physics.dt
-    var d = (((compute_velocity(0, b, b.av, b.aacc, b.adrag, b.amax) - b.av) * dt) * 0.5) * 60
+    var d = (30 * (compute_velocity(0, b, b.av, b.aacc, b.adrag, b.amax) - b.av)) * dt
     set b.av += d
     set b.rot += b.av * dt
     set b.av += d
-    set d = (((compute_velocity(1, b, b.vx, b.accx, b.dragx, b.maxx) - b.vx) * dt) * 0.5) * 60
+    set d = (30 * (compute_velocity(1, b, b.vx, b.accx, b.dragx, b.maxx) - b.vx)) * dt
     set b.vx += d
     set b.x += b.vx * dt
     set b.vx += d
-    set d = (((compute_velocity(2, b, b.vy, b.accy, b.dragy, b.maxy) - b.vy) * dt) * 0.5) * 60
+    set d = (30 * (compute_velocity(2, b, b.vy, b.accy, b.dragy, b.maxy) - b.vy)) * dt
     set b.vy += d
     set b.y += b.vy * dt
     set b.vy += d

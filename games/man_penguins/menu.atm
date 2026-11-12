@@ -1,0 +1,24 @@
+;; Menu: the picture, a label that swings; UP starts.
+
+val IMG_BG = eng.image(A ++ "images/bg.png")
+
+task Menu () {
+    val keys = Cursor()
+    val label = Text(W/2, H - 50, "press the UP arrow key to start", 25)
+    set label.ax, label.ay = (0.5, 0.5)
+    set label.angle = 0
+    spawn {
+        loop {
+            await Motion(label, [angle=1], 1000)
+            await Motion(label, [angle=-2], 1000)
+        }
+    }
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            eng.draw(IMG_BG, 0, 0, 0)
+            text_draw(label)
+        }
+    }
+    await :update until cursor_down(keys, 'UP')
+}
