@@ -43,5 +43,6 @@ maintains it. Nothing here blocked the port.
 
 ## Checks
 
-- The suite runs with `ATMOS_ASAN=1` with no error and no leak
-  (`ASAN=1 tst/run.sh`), including 2400 frames of Run! with 8 games.
+- Run! built with `ATMOS_ASAN=1` runs its three runs (3900 frames, 12
+  games) with no error and no leak, and the same traces. `ASAN=1
+  tst/run.sh` fails when a run exits with an error.

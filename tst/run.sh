@@ -59,12 +59,14 @@ for dir in games/*/; do
         r=$(basename $run .run)
         FRAMES=600; SEED=1; INPUT=; SHOTS=
         . "./$run"
-        RL_FRAMES=$FRAMES RL_SEED=$SEED RL_INPUT=$INPUT "$OUT/$g" 2>/dev/null > "$OUT/$g-$r.out"
-        if cmp -s tst/$g/$r.out "$OUT/$g-$r.out"; then
+        RL_FRAMES=$FRAMES RL_SEED=$SEED RL_INPUT=$INPUT "$OUT/$g" 2>"$OUT/$g-$r.err" > "$OUT/$g-$r.out"
+        st=$?
+        if [ $st = 0 ] && cmp -s tst/$g/$r.out "$OUT/$g-$r.out"; then
             ok "$g $r"
         else
-            fail "$g $r"
+            fail "$g $r (exit $st)"
             diff tst/$g/$r.out "$OUT/$g-$r.out" | head -4
+            grep -m3 "ERROR\|SUMMARY" "$OUT/$g-$r.err"
         fi
     done
 done
