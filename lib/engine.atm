@@ -94,7 +94,9 @@ static Font* eng_font (const char* path, int size) {
     if (eng_nfonts == ENG_MAX) {
         return NULL;
     }
-    Font f = LoadFontEx(path, size, NULL, 0);
+    // raylib scales a TTF so that ascent+descent is the size; the browser,
+    // so that the em is: 2288/2048 for Liberation Sans
+    Font f = LoadFontEx(path, (int)round(size * 2288.0/2048), NULL, 0);
     SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
     eng_fonts[eng_nfonts].path = strdup(path);
     eng_fonts[eng_nfonts].size = size;
@@ -134,7 +136,7 @@ static double eng_text (const char* path, int size, const char* s,
     }
     double w = 0;
     for (int i=0; i<n; i++) {
-        double lw = MeasureTextEx(*f, lines[i], (float)size, 0).x;
+        double lw = MeasureTextEx(*f, lines[i], (float)f->baseSize, 0).x;
         if (lw > w) w = lw;
     }
     double lh = eng_line_height(size);
@@ -145,9 +147,11 @@ static double eng_text (const char* path, int size, const char* s,
         double x0 = x - ax * w;
         double y0 = y - ay * h;
         for (int i=0; i<n; i++) {
-            double lw = MeasureTextEx(*f, lines[i], (float)size, 0).x;
-            Vector2 p = { (float)(x0 + align*(w - lw)), (float)(y0 + i*lh) };
-            DrawTextEx(*f, lines[i], p, (float)size, 0, c);
+            double lw = MeasureTextEx(*f, lines[i], (float)f->baseSize, 0).x;
+            // the browser draws a line higher than raylib does, by about 0.12
+            // of the size: measured 4 px at 30 px and 2 px at 20 px (Run!)
+            Vector2 p = { (float)(x0 + align*(w - lw)), (float)(y0 + i*lh - round(size*0.12)) };
+            DrawTextEx(*f, lines[i], p, (float)f->baseSize, 0, c);
         }
     }
     return w;
@@ -221,6 +225,11 @@ val eng = [
     now = func () {
         val f = rl.frame()
         if f >= 1 => 1000 + ((f - 1) * (1000 / 60)) => 1000 + (rl.time() * 1000)
+    },
+
+    ;; eng.fixed(x, n): x with n decimals, as Number.toFixed in the traces
+    fixed = func (x, n) {
+        string.format("%." ++ tostring(n) ++ "f", x)
     },
 
     ;; eng.image(path, [fw, fh]): an image, or a sheet of frames of fw x fh

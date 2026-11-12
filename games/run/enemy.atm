@@ -1,0 +1,48 @@
+;; An enemy: it crosses the screen from a side to another in 3 s, and dies
+;; when it leaves the world. Its life is the task: the group of Phaser,
+;; recycled with getFirstExists, is a pool of tasks.
+
+val IMG_ENEMY = [
+    eng.image(A ++ "images/enemy1.png", 32, 36),
+    eng.image(A ++ "images/enemy2.png", 28, 40),
+]
+
+;; newEnemy: the kind, then the side, then where it starts and goes, with the
+;; draws of the original in the same order
+func new_enemy () {
+    val kind = if eng.rand(2) == 1 => 0 => 1
+    val img = IMG_ENEMY@kind
+    val ew, eh = (img.fw, img.fh)
+    val side = eng.rand(4)
+    val x, y, tox, toy = match side {
+        0 => (eng.rand(W), (-eh/2) + 2, eng.rand(W), H + eh)
+        1 => (eng.rand(W), (H + (eh/2)) - 2, eng.rand(W), -eh)
+        2 => ((-ew/2) + 2, eng.rand(H), W + ew, eng.rand(H))
+        3 => ((W + (ew/2)) - 2, eng.rand(H), -ew, eng.rand(H))
+    }
+    (kind, x, y, tox, toy)
+}
+
+task Enemy (kind, x, y, tox, toy) {
+    val spr = Sprite(IMG_ENEMY@kind, x, y)
+    set spr.ax, spr.ay = (0.5, 0.5)
+    set spr.angle = 90 + ((math.atan2(y - toy, x - tox) * 180) / math.pi)
+    set pub = spr
+    val body = Body(spr, :enemy)
+    defer {
+        body_remove(body)
+    }
+    sprite_add(spr, :move)
+    sprite_play(spr, :move, 5, true)
+
+    par :any {
+        await Motion(spr, [x=tox, y=toy], 3000)
+        await false                         ;; stays where it stopped
+    } with {
+        await :pre until !in_world(spr)     ;; outOfBoundsKill
+    } with {
+        loop on :pre {
+            sprite_update(spr)
+        }
+    }
+}

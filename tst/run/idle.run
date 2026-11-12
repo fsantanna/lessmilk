@@ -1,0 +1,5 @@
+# Run!: no input, with another seed: the enemies alone, until one hits.
+FRAMES=600
+SEED=1
+INPUT=
+SHOTS="120 240"

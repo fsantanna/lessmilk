@@ -1,0 +1,42 @@
+;; Run! (lessmilk.com, game #1, 2014), by Thomas Palef.
+;; Ported to Atmos from the original (Phaser 1.1.3) and from the port of
+;; Jessica Oliveira (jessicacoliveira/atmos-lessmilk, Run/modular).
+;;
+;; The states of Phaser (Load, Play, Over) are a loop of screens: Play
+;; returns the score that Over shows.
+;;
+;;      tools/atmos.sh games/run/main.atm out/run && out/run    (from the root)
+
+include "../../lib/game.atm"
+
+val W, H = (350, 350)
+val BG = 0x34495EFF
+val A = "assets/1/"
+
+var screen = "Play"         ;; the state of Phaser, for the trace
+var score  = 0              ;; the global `score` of the original
+
+;; the window first: the files below load their images
+rl.window [title="Run!", width=W, height=H]
+
+include "enemy.atm"
+include "play.atm"
+include "over.atm"
+
+spawn Game(W, H)
+
+;; the trace of tools/original/trace/1.js, a line per frame, in test mode
+spawn {
+    if os.getenv("RL_FRAMES") {
+        loop on :rl.frame {
+            print(trace())
+        }
+    }
+}
+
+loop {
+    set screen = "Play"
+    set score = await Play()
+    set screen = "Over"
+    await Over(score)
+}

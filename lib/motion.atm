@@ -12,10 +12,13 @@
 ;;      v = start + (end - start) * ease(min(1, (now - start_time) / ms))
 ;;
 ;; It moves on the time events, which come before :rl.frame in a frame, as
-;; Phaser updates its tweens before the update of the state. Started in a
-;; frame, it first moves in the next one, as a tween started in an update.
-;; The task ends in the frame in which it reaches the end: `await` goes on
-;; there, as an `onComplete` did.
+;; Phaser updates its tweens before the update of the state. TweenManager
+;; adds a new tween at the end of its pass over the tweens: a tween started
+;; in a create (before frame 1) first moves in frame 2; in an update (frame
+;; k), in frame k+2; in the pass itself (by an `onComplete`, or here after
+;; the `await` of another Motion, in frame k), in frame k+1. That is: from
+;; the first time event after the next :rl.frame. The task ends in the frame in which it
+;; reaches the end: `await` goes on there, as an `onComplete` did.
 ;;
 ;; What Phaser chained by callbacks (`onComplete`, `.to().to()`, `.loop()`,
 ;; `.delay()`) is a sequence of awaits here:
@@ -56,6 +59,7 @@ task Motion (obj, to, ms, ease) {
         set from@k = obj@k
     }
     val t0 = eng.now()
+    await :rl.frame                 ;; added at the end of the next pass
     loop {
         await :clock
         val t = (eng.now() - t0) / ms

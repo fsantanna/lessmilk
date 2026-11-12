@@ -1,0 +1,110 @@
+;; Play: the player moves with the arrows; an enemy every 500 ms; a point
+;; every second; it ends when an enemy touches the player, with the score.
+
+val IMG_PLAYER = eng.image(A ++ "images/player.png", 20, 24)
+val SND_HIT = eng.sound(A ++ "sounds/hit.wav")
+
+task Play () {
+    val keys = Cursor()
+    val player = Sprite(IMG_PLAYER, W/2, H/2)
+    val body = Body(player, :player)
+    set body.world = true
+    defer {
+        body_remove(body)
+    }
+    sprite_add(player, :bottom, [0, 1], 10, true)
+    sprite_add(player, :top,    [4, 5], 10, true)
+    sprite_add(player, :right,  [2, 3], 10, true)
+    sprite_add(player, :left,   [6, 7], 10, true)
+
+    pin enemies = tasks(60)
+
+    val label_score = Text(15, 10, "score: 0", 20)
+    val label_keys  = Text(math.floor(W/2) + 1, H - 50, "use the arrow keys to move", 20)
+    set label_keys.ax, label_keys.ay = (0.5, 1)
+    set score = 0
+
+    ;; the drawing, in the order of the display list of the original
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            sprite_draw(player)
+            loop _, e in enemies {
+                sprite_draw(e.pub)
+            }
+            text_draw(label_score)
+            text_draw(label_keys)
+        }
+    }
+
+    ;; the animation of the player, in preUpdate
+    spawn {
+        loop on :pre {
+            sprite_update(player)
+        }
+    }
+
+    ;; the arrows: the label fades at the first UP (the flag firstKey)
+    spawn {
+        await :update until cursor_down(keys, 'UP')
+        await Motion(label_keys, [alpha=0], 800)
+    }
+
+    ;; the arrows: a level, polled in each update, in the order of the original
+    spawn {
+        loop on :update {
+            set body.vx, body.vy = (0, 0)
+            ifs {
+                cursor_down(keys, 'LEFT')  => { set body.vx = -300 ; sprite_play(player, :left)   }
+                cursor_down(keys, 'RIGHT') => { set body.vx =  300 ; sprite_play(player, :right)  }
+                cursor_down(keys, 'UP')    => { set body.vy = -300 ; sprite_play(player, :top)    }
+                cursor_down(keys, 'DOWN')  => { set body.vy =  300 ; sprite_play(player, :bottom) }
+                else => sprite_stop(player)
+            }
+        }
+    }
+
+    ;; an enemy now and then every 500 ms (enemyTime)
+    spawn {
+        await :update
+        loop {
+            spawn @enemies Enemy(new_enemy())
+            await Wait(500)
+        }
+    }
+
+    ;; a point now and then every second (scoreTime)
+    spawn {
+        await :update
+        loop {
+            set score += 1
+            set label_score.s = "score: " ++ tostring(score)
+            await Wait(1000)
+        }
+    }
+
+    ;; physics.overlap(player, enemies): the end of the game
+    await :overlap until overlap_any(body, :enemy)
+    score
+}
+
+;; the line of the trace: as tools/original/trace/1.js
+func trace () {
+    val f = rl.frame()
+    if screen == "Play" {
+        var n, sx, sy = (0, 0, 0)
+        loop _, b in Physics.bodies {
+            if b.group == :enemy {
+                set n += 1
+                set sx += b.spr.x
+                set sy += b.spr.y
+            }
+        }
+        val p = Physics.bodies@0
+        tostring(f) ++ " Play " ++ tostring(score) ++ " " ++
+            eng.fixed(p.spr.x, 2) ++ " " ++ eng.fixed(p.spr.y, 2) ++ " " ++
+            tostring(n) ++ " " ++ eng.fixed(sx, 2) ++ " " ++ eng.fixed(sy, 2)
+    } else {
+        tostring(f) ++ " " ++ screen ++ " " ++ tostring(score)
+    }
+}

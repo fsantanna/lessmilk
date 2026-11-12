@@ -1,10 +1,12 @@
 ;; Checks lib/motion.atm: a linear tween, a bounce, and a sequence with a
-;; delay, printed frame by frame.
+;; delay, printed frame by frame. Started before frame 1, as in a create, a
+;; tween first moves in frame 2; started after the end of another (in the
+;; pass of the tweens), in the next frame.
 
-include "../../lib/engine.atm"
-include "../../lib/motion.atm"
+include "../../lib/game.atm"
 
 rl.window [title="motion", width=100, height=100]
+spawn Game(100, 100)
 
 val a = [x=0, y=100]
 val b = [s=0]

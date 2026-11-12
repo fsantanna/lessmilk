@@ -1,0 +1,19 @@
+;; Over: the score, and UP to play again, but only after 800 ms.
+
+task Over (score) {
+    val keys = Cursor()
+    val label = Text(W/2, H/2, "game over\n\nscore: " ++ tostring(score) ++
+                     "\n\npress the UP arrow key\nto restart", 30, 0.5)
+    set label.ax, label.ay = (0.5, 0.5)
+    eng.play(SND_HIT, 0.1)
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            text_draw(label)
+        }
+    }
+    await Wait(800)
+    if !cursor_down(keys, 'UP') {
+        await :update until cursor_down(keys, 'UP')
+    }
+}

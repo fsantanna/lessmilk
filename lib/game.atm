@@ -7,6 +7,8 @@
 ;;                      tests if it left the world; then the bodies move
 ;;                      (physics_pre)
 ;;      :update         state.update: the game
+;;      :overlap        the end of state.update, where the games call
+;;                      physics.overlap and physics.collide
 ;;      (physics_post)  world.postUpdate: the sprites follow their bodies
 ;;      :rl.draw        render
 ;;
@@ -22,6 +24,24 @@ include "physics.atm"
 ;; Phaser drew one random number when it booted, before the game
 eng.random()
 
+;; Keys: the frame of the last press of each key (an :rl.key.dn before
+;; frame f is a keydown before the update of frame f)
+val Keys = [ frame = 0, pressed = [] ]
+
+;; Cursor(): the keys of a state, as game.input.keyboard.createCursorKeys():
+;; new keys, which are up until pressed after they were created. A key held
+;; from the previous state is not down in the next one until pressed again.
+;;
+;;      val keys = Cursor()
+;;      if cursor_down(keys, 'UP') { ... }
+func Cursor () {
+    :Cursor [ born = Keys.frame ]
+}
+
+func cursor_down (c, k) {
+    rl.key_down(k) && ((Keys.pressed@(k) || -1) > c.born)
+}
+
 task Wait (ms) {
     val t = eng.now() + ms
     await :update until eng.now() > t
@@ -30,14 +50,23 @@ task Wait (ms) {
 task Game (w, h) {
     set Physics.w = w
     set Physics.h = h
+    spawn {
+        loop e on :rl.key.dn {
+            if e.name {
+                set Keys.pressed@(e.name) = Keys.frame + 1
+            }
+        }
+    }
     var prev = eng.now()
     loop on :rl.frame {
+        set Keys.frame += 1
         val now = eng.now()
         set Physics.dt = (now - prev) / 1000
         set prev = now
         emit @:global :pre
         physics_pre()
         emit @:global :update
+        emit @:global :overlap
         physics_post()
         physics_draw()
     }

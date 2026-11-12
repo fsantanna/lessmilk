@@ -51,4 +51,22 @@ else
     fail sprite
 fi
 
+# the games: each run against the trace of the original (tools/compare.sh)
+for dir in games/*/; do
+    g=$(basename $dir)
+    tools/atmos.sh games/$g/main.atm "$OUT/$g" || { fail "$g (build)"; continue; }
+    for run in tst/$g/*.run; do
+        r=$(basename $run .run)
+        FRAMES=600; SEED=1; INPUT=; SHOTS=
+        . "./$run"
+        RL_FRAMES=$FRAMES RL_SEED=$SEED RL_INPUT=$INPUT "$OUT/$g" 2>/dev/null > "$OUT/$g-$r.out"
+        if cmp -s tst/$g/$r.out "$OUT/$g-$r.out"; then
+            ok "$g $r"
+        else
+            fail "$g $r"
+            diff tst/$g/$r.out "$OUT/$g-$r.out" | head -4
+        fi
+    done
+done
+
 exit $FAIL
