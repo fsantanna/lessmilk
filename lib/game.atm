@@ -52,8 +52,10 @@ task Wait (ms) {
 }
 
 task Game (w, h) {
+    set Physics.x, Physics.y = (0, 0)
     set Physics.w = w
     set Physics.h = h
+    set Camera.w, Camera.h = (w, h)
     spawn {
         loop e on :rl.key.dn {
             if e.name {

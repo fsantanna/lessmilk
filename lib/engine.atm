@@ -188,7 +188,8 @@ static double eng_line_height (int size, double asc, double desc, double gap, do
 static double eng_text (const char* path, double asc, double desc, double gap,
                         double upem, int size, const char* s,
                         double x, double y, double ax, double ay,
-                        double align, Color c, double alpha, int draw) {
+                        double align, Color c, double alpha, int draw,
+                        double angle) {
     double fs;
     Font* f = eng_font(path, size, (asc + desc) / upem, &fs);
     if (f == NULL) {
@@ -222,8 +223,9 @@ static double eng_text (const char* path, double asc, double desc, double gap,
             double lw = MeasureTextEx(*f, lines[i], (float)fs, 0).x;
             // the browser draws a line higher than raylib does, by about 0.12
             // of the size: measured 4 px at 30 px and 2 px at 20 px (Run!)
-            Vector2 p = { (float)(x0 + align*(w - lw)), (float)(y0 + i*lh - round(size*0.12)) };
-            DrawTextEx(*f, lines[i], p, (float)fs, 0, c);
+            // rotated around the anchor (x,y): each line from its offset
+            Vector2 org = { (float)(x - (x0 + align*(w - lw))), (float)(y - (y0 + i*lh - round(size*0.12))) };
+            DrawTextPro(*f, lines[i], (Vector2){ (float)x, (float)y }, org, (float)angle, (float)fs, 0, c);
         }
     }
     return w;
@@ -337,23 +339,24 @@ val eng = [
             x, y, w, h, (ax || 0) * w, (ay || 0) * h, angle || 0, 0xFFFFFF00 | a)
     },
 
-    ;; eng.text(s, x, y, size, [color, ax, ay, align, alpha, font]): draws
-    ;; the text with its anchor at (x,y); lines are aligned by `align` (0 to
-    ;; 1); FONT_SANS by default
-    text = func (s, x, y, size, color, ax, ay, align, alpha, font) {
+    ;; eng.text(s, x, y, size, [color, ax, ay, align, alpha, font, angle]):
+    ;; draws the text with its anchor at (x,y), rotated around it by `angle`
+    ;; degrees; lines are aligned by `align` (0 to 1); FONT_SANS by default
+    text = func (s, x, y, size, color, ax, ay, align, alpha, font, angle) {
         val c = color || 0xFFFFFFFF
         val ax_, ay_, al_ = (ax || 0, ay || 0, align || 0)
         val a = if alpha == nil => 1 => alpha
         val f = font || FONT_SANS
         val p, as, ds, gp, em = (f.path, f.asc, f.desc, f.gap, f.upem)
-        `eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), a_dbl($x), a_dbl($y), a_dbl($ax_), a_dbl($ay_), a_dbl($al_), rl_color($c), a_dbl($a), 1);`
+        val an = angle || 0
+        `eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), a_dbl($x), a_dbl($y), a_dbl($ax_), a_dbl($ay_), a_dbl($al_), rl_color($c), a_dbl($a), 1, a_dbl($an));`
     },
 
     ;; eng.measure(s, size, [font]): the width of the text
     measure = func (s, size, font) {
         val f = font || FONT_SANS
         val p, as, ds, gp, em = (f.path, f.asc, f.desc, f.gap, f.upem)
-        `:number eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), 0, 0, 0, 0, 0, WHITE, 1, 0)`
+        `:number eng_text(rl_s($p), a_dbl($as), a_dbl($ds), a_dbl($gp), a_dbl($em), (int)a_dbl($size), rl_s($s), 0, 0, 0, 0, 0, WHITE, 1, 0, 0)`
     },
 
     ;; eng.sound(path): a sound, loaded once per path (rl.sound); with no

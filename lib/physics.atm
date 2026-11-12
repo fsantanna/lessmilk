@@ -40,6 +40,31 @@ static void phs_scale (double rot, double sx, double sy, double* out) {
     out[1] = sqrt(d10*d10 + d11*d11);
 }
 
+// The four corners of a sprite (topLeft, topRight, bottomLeft, bottomRight,
+// as x y), as Sprite.updateBounds computes them with getLocalPosition.
+static void phs_corners (double x, double y, double rot, double sx, double sy,
+                         double fw, double fh, double ax, double ay, double* out) {
+    double sr = sin(rot), cr = cos(rot);
+    float l0 = (float)(cr * sx), l1 = (float)(-sr * sy);
+    float l3 = (float)(sr * sx), l4 = (float)(cr * sy);
+    double a00 = l0, a01 = l1, a10 = l3, a11 = l4;
+    double a02 = (float)x, a12 = (float)y;
+    a01 *= -1;
+    a10 *= -1;
+    double id = 1 / (a00 * a11 + a01 * -a10);
+    double width  = sx * fw;
+    double height = sy * fh;
+    double ox = a02 - (ax * width);
+    double oy = a12 - (ay * height);
+    double cx[4] = { ox, ox + width, ox, ox + width };
+    double cy[4] = { oy, oy, oy + height, oy + height };
+    for (int i=0; i<4; i++) {
+        double X = cx[i], Y = cy[i];
+        out[2*i]   = ((a11 * id * X + -a01 * id * Y + (a12 * a01 - a02 * a11) * id) * sx) + a02;
+        out[2*i+1] = ((a00 * id * Y + -a10 * id * X + (-a12 * a00 + a02 * a10) * id) * sy) + a12;
+    }
+}
+
 // The bounds of a sprite, as Phaser 1.1.3 computes them in
 // Sprite.updateCache and Sprite.updateBounds, from the world transform of
 // Pixi, which is a Float32Array: x y of the last frame drawn, its angle in
@@ -82,13 +107,34 @@ static void phs_bounds (double x, double y, double rot, double sx, double sy,
 ```
 
 val Physics = [
-    w = 0, h = 0,           ;; the world: (0, 0, w, h)
+    x = 0, y = 0,           ;; the world: (x, y, w, h) (world.setBounds)
+    w = 0, h = 0,
     elapsed = 0,            ;; game.time.elapsed, in ms
     dt = 0,                 ;; game.time.physicsElapsed, in seconds
     gx = 0, gy = 0,         ;; game.physics.gravity
     bodies = [],            ;; the bodies, in the order they were created
     qt = nil,               ;; the quadtree of the frame
 ]
+
+;; camera.x and camera.y set (Camera in lib/sprite.atm): kept in the bounds of
+;; the world (Camera.checkBounds, with view.floor()), as the setter does
+func camera_set (k, v) {
+    set Camera@(k) = v
+    if Camera.x < Physics.x {
+        set Camera.x = Physics.x
+    }
+    if Camera.x > ((Physics.x + Physics.w) - Camera.w) {
+        set Camera.x = ((Physics.x + Physics.w) - Camera.w) + 1
+    }
+    if Camera.y < Physics.y {
+        set Camera.y = Physics.y
+    }
+    if Camera.y > ((Physics.y + Physics.h) - Camera.h) {
+        set Camera.y = ((Physics.y + Physics.h) - Camera.h) + 1
+    }
+    set Camera.x = math.floor(Camera.x)
+    set Camera.y = math.floor(Camera.y)
+}
 
 ;; a 32-bit float, as the transforms of Pixi keep positions
 func f32 (x) {
@@ -104,10 +150,12 @@ func drawn_scale (s) {
 }
 
 ;; Sprite.updateCache and the render: the transform drawn, read by the next
-;; preUpdate (position as 32-bit floats, rotation, scale)
+;; preUpdate: the position on the screen, x - camera.x, as a 32-bit float
+;; (worldTransform[2] of Pixi); the rotation; the scale. The position in the
+;; world is camera.x + dx, with the camera of the time it is read.
 func sprite_drawn (s) {
-    set s.dx  = f32(s.x)
-    set s.dy  = f32(s.y)
+    set s.dx  = f32(s.x - Camera.x)
+    set s.dy  = f32(s.y - Camera.y)
     set s.drot = s.rot
     set s.dsx = s.sx
     set s.dsy = s.sy
@@ -169,8 +217,8 @@ func body_reset (b, x, y) {
     set b.vx, b.vy = (0, 0)
     set b.accx, b.accy = (0, 0)
     set b.av, b.aacc = (0, 0)
-    set b.px = (b.spr.dx - (b.spr.ax * b.w)) + b.ox
-    set b.py = (b.spr.dy - (b.spr.ay * b.h)) + b.oy
+    set b.px = ((Camera.x + b.spr.dx) - (b.spr.ax * b.w)) + b.ox
+    set b.py = ((Camera.y + b.spr.dy) - (b.spr.ay * b.h)) + b.oy
     set b.x = b.px
     set b.y = b.py
     set b.rot = angle_get(b.spr)
@@ -247,8 +295,8 @@ func physics_pre () {
             set b.h = b.sh * scy
             set b.touching.up, b.touching.down = (false, false)
             set b.touching.left, b.touching.right = (false, false)
-            set b.px = (s.dx - (s.ax * b.w)) + b.ox
-            set b.py = (s.dy - (s.ay * b.h)) + b.oy
+            set b.px = ((Camera.x + s.dx) - (s.ax * b.w)) + b.ox
+            set b.py = ((Camera.y + s.dy) - (s.ay * b.h)) + b.oy
             set b.x = b.px
             set b.y = b.py
             set b.prot = angle_get(s)
@@ -256,13 +304,14 @@ func physics_pre () {
             if b.moves {
                 update_motion(b)
                 if b.world {
+                    val rx, by_ = (Physics.x + Physics.w, Physics.y + Physics.h)
                     ifs {
-                        b.x < 0 => { set b.x = 0 ; set b.vx *= -b.bx }
-                        (b.x + b.w) > Physics.w => { set b.x = Physics.w - b.w ; set b.vx *= -b.bx }
+                        b.x < Physics.x => { set b.x = Physics.x ; set b.vx *= -b.bx }
+                        (b.x + b.w) > rx => { set b.x = rx - b.w ; set b.vx *= -b.bx }
                     }
                     ifs {
-                        b.y < 0 => { set b.y = 0 ; set b.vy *= -b.by }
-                        (b.y + b.h) > Physics.h => { set b.y = Physics.h - b.h ; set b.vy *= -b.by }
+                        b.y < Physics.y => { set b.y = Physics.y ; set b.vy *= -b.by }
+                        (b.y + b.h) > by_ => { set b.y = by_ - b.h ; set b.vy *= -b.by }
                     }
                 }
             }
@@ -330,7 +379,7 @@ func qt_node (x, y, w, h, level) {
 }
 
 func qt_clear () {
-    set Physics.qt = qt_node(0, 0, Physics.w, Physics.h, 0)
+    set Physics.qt = qt_node(Physics.x, Physics.y, Physics.w, Physics.h, 0)
 }
 
 func qt_index (q, r) {
@@ -523,17 +572,17 @@ func collide (b1, b2) {
     separate_axis(b1, b2, :x) || separate_axis(b1, b2, :y)
 }
 
-;; Sprite.updateBounds: the bounds of the sprite as drawn in the last frame
-;; (rotated, from the 32-bit transform): left, top, right, bottom. For a
-;; sprite that is not rotated, bottomLeft.y of Phaser is the bottom.
-func sprite_bounds (s) {
+;; Sprite.updateBounds: the corners of the sprite as drawn in the last frame
+;; (rotated, from the 32-bit transform, on the screen): topLeft, topRight,
+;; bottomLeft, bottomRight, as x y pairs
+func sprite_corners (s) {
     val dx, dy, r, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.drot, s.dsx, s.dsy, s.img.fw, s.img.fh, s.ax, s.ay)
-    val out = [0, 0, 0, 0]
+    val out = [0, 0, 0, 0, 0, 0, 0, 0]
     ```
-    double o[4];
-    phs_bounds(a_dbl($dx), a_dbl($dy), a_dbl($r), a_dbl($sx), a_dbl($sy),
-               a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), o);
-    for (int i=0; i<4; i++) {
+    double o[8];
+    phs_corners(a_dbl($dx), a_dbl($dy), a_dbl($r), a_dbl($sx), a_dbl($sy),
+                a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), o);
+    for (int i=0; i<8; i++) {
         AVal k = a_int(i);
         AVal v = a_num(o[i]);
         a_setindex($out, k, v);
@@ -541,13 +590,35 @@ func sprite_bounds (s) {
         a_dec(v);
     }
     ```
-    (out@0, out@1, out@2, out@3)
+    out
 }
 
-;; Sprite.inWorld: the bounds of the sprite as drawn, against the world
+;; the bounds of the sprite (left, top, right, bottom), from its corners
+func sprite_bounds (s) {
+    val c = sprite_corners(s)
+    (math.min(c@0, c@2, c@4, c@6), math.min(c@1, c@3, c@5, c@7),
+     math.max(c@0, c@2, c@4, c@6), math.max(c@1, c@3, c@5, c@7))
+}
+
+;; Sprite.inWorld: the bounds of the sprite as drawn, against the bounds of
+;; the world (Rectangle.intersects, strict)
 func in_world (s) {
     val l, t, r, b = sprite_bounds(s)
-    (l < Physics.w) && (0 < r) && (t < Physics.h) && (0 < b)
+    (l < (Physics.x + Physics.w)) && (Physics.x < r) && (t < (Physics.y + Physics.h)) && (Physics.y < b)
+}
+
+;; collideSpriteVsGroup: the body against the bodies of a group (a tag) in
+;; the quadtree, in its order; true if any was separated
+func collide_group (a, group) {
+    var any = false
+    loop _, b in qt_retrieve(Physics.qt, a, []) {
+        if (b.group == group) && (b != a) {
+            if collide(a, b) {
+                set any = true
+            }
+        }
+    }
+    any
 }
 
 ;; Group: game.add.group() and createMultiple(n, key): n sprites with bodies,

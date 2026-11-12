@@ -7,6 +7,11 @@ static double spr_wrap_angle (double a) {
 }
 ```
 
+;; game.camera: its view (x, y), integers (lib/physics.atm sets it, as the
+;; setter of Phaser does). The world is drawn at -camera: a sprite is drawn at
+;; its x - camera.x.
+val Camera = :Camera [ x = 0, y = 0, w = 0, h = 0 ]
+
 ;; Sprite: an image or a sheet, with a position, an anchor, an angle, a
 ;; scale, an alpha, and named animations, as a sprite of Phaser 1.1.3.
 ;;
@@ -54,14 +59,15 @@ func angle_set (s, v) {
 }
 
 ;; a field of a sprite, for Motion: `angle` through angle_get and angle_set
+;; and the camera, whose x and y are set as its setter does (camera_set)
 func prop_get (o, k) {
     if (k == "angle") && (o ?? :Sprite) => angle_get(o) => o@(k)
 }
 func prop_set (o, k, v) {
-    if (k == "angle") && (o ?? :Sprite) {
-        angle_set(o, v)
-    } else {
-        set o@(k) = v
+    ifs {
+        (k == "angle") && (o ?? :Sprite) => angle_set(o, v)
+        o ?? :Camera => camera_set(k, v)
+        else => set o@(k) = v
     }
 }
 
@@ -144,7 +150,7 @@ val World = [ alpha = 1 ]
 
 func sprite_draw (s) {
     if s.visible {
-        eng.draw(s.img, s.frame, s.x, s.y + (s.oy || 0), s.ax, s.ay, (s.rot * 180) / math.pi, s.sx, s.sy, s.alpha * World.alpha)
+        eng.draw(s.img, s.frame, s.x - Camera.x, (s.y + (s.oy || 0)) - Camera.y, s.ax, s.ay, (s.rot * 180) / math.pi, s.sx, s.sy, s.alpha * World.alpha)
     }
 }
 
@@ -168,6 +174,6 @@ func Text (x, y, s, size, align, font) {
 ;; scale: Pixi scales the picture of the text, raylib draws the font larger
 func text_draw (t) {
     if t.visible {
-        eng.text(t.s, t.x + (t.ox || 0), t.y + (t.oy || 0), t.size * (t.sx || 1), t.color, t.ax, t.ay, t.align, t.alpha * World.alpha, t.font)
+        eng.text(t.s, (t.x + (t.ox || 0)) - Camera.x, (t.y + (t.oy || 0)) - Camera.y, t.size * (t.sx || 1), t.color, t.ax, t.ay, t.align, t.alpha * World.alpha, t.font, t.angle || 0)
     }
 }
