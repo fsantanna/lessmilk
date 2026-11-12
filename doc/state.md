@@ -12,7 +12,7 @@ or a task.
 | JavaScript | Kind | Port |
 |------------|------|------|
 | `w`, `h` | constant | `W`, `H` |
-| `score` (global) | data, passed from Play to Over through a global | the value that `Play` returns, which `Over` receives |
+| `score` (global) | data, passed from Play to Over through a global | the value that `Play` returns, which `Over` receives as an argument; it is still a global of the port, which `Play` sets, so that the trace reads it in each frame |
 | `this.enemyTime` (Play) | control: the time of the next enemy, compared with `game.time.now` in each update | `await Wait(500)` in the loop of the enemies |
 | `this.scoreTime` (Play) | control: the time of the next point | `await Wait(1000)` in the loop of the points |
 | `this.firstKey` (Play) | control: the label fades once, at the first UP | the sequence `await :update until UP` then `await Motion(...)`, which runs once |
