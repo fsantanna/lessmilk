@@ -1,0 +1,19 @@
+;; The environment builds and runs with no screen: a window of the size of
+;; Run!, its background, a text, and a second.
+
+include "../../env/raylib.atm"
+
+rl.window [title="hello", width=350, height=350]
+
+spawn {
+    await 1s
+    print(rl.frame(), "1s")
+}
+spawn {
+    loop on :rl.draw {
+        rl.clear(0x34495EFF)
+        rl.text("hello", 15, 10, 20, rl.WHITE)
+    }
+}
+await :rl.quit
+print(rl.frame(), "quit")

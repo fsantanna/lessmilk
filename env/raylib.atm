@@ -1,0 +1,574 @@
+;; A raylib environment for Atmos.
+;;
+;;      include "raylib.atm"
+;;      ATMOS_CFLAGS="-O2 -I<raylib>/src" ATMOS_LDFLAGS="<raylib>/libraylib.a -lm" atmos game.atm
+;;
+;; The program opens the window with `rl.window [...]` and then runs inside the
+;; loop of raylib, which emits, once per frame and in this order:
+;;
+;;      :rl.key.dn [key=262, name='RIGHT']  a key was pressed
+;;      :rl.key.up [key=262, name='RIGHT']  a key was released
+;;      :rl.mouse.dn [button=0, x=, y=]     a mouse button was pressed
+;;      :rl.mouse.up [button=0, x=, y=]     a mouse button was released
+;;      :rl.wheel [dy=1]                    the mouse wheel moved
+;;      <number>                            the time passed, in microseconds,
+;;                                          so that `await 1s` works as usual
+;;      :rl.frame                           one frame of logic
+;;      :rl.draw                            one frame of drawing, between
+;;                                          BeginDrawing and EndDrawing
+;;      :rl.quit                            the window closes (ESC, or the end
+;;                                          of a test): the program terminates
+;;
+;; Input is also available by polling (`rl.key_down`), for what is a level and
+;; not an event, such as a key held to move.
+;;
+;; Colors are numbers 0xRRGGBBAA, as `rl.RED`. Positions and sizes are plain
+;; numbers. The wrappers follow the names of raylib, with no `Draw`: as in
+;; raylib, `rl.rectangle` takes integers and `rl.rectangle_v` takes floats.
+;;
+;; To test with no screen, build raylib for PLATFORM_MEMORY with the patch of
+;; this repository (tools/raylib.patch), and set RL_FRAMES, RL_SEED, RL_INPUT,
+;; and RL_SHOT (see doc/fidelity.md). `rl.frame()` is the current frame.
+
+```:prelude
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "raylib.h"
+
+int RltFrame (void) __attribute__((weak));
+
+static const int RL_KEY_CODES[] = { 4, 5, 24, 25, 32, 39, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 59, 61, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 96, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 280, 281, 282, 283, 284, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 340, 341, 342, 343, 344, 345, 346, 347, 348 };
+static const char* RL_KEY_NAMES[] = {
+    "BACK",
+    "MENU",
+    "VOLUME_UP",
+    "VOLUME_DOWN",
+    "SPACE",
+    "APOSTROPHE",
+    "COMMA",
+    "MINUS",
+    "PERIOD",
+    "SLASH",
+    "ZERO",
+    "ONE",
+    "TWO",
+    "THREE",
+    "FOUR",
+    "FIVE",
+    "SIX",
+    "SEVEN",
+    "EIGHT",
+    "NINE",
+    "SEMICOLON",
+    "EQUAL",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "LEFT_BRACKET",
+    "BACKSLASH",
+    "RIGHT_BRACKET",
+    "GRAVE",
+    "ESCAPE",
+    "ENTER",
+    "TAB",
+    "BACKSPACE",
+    "INSERT",
+    "DELETE",
+    "RIGHT",
+    "LEFT",
+    "DOWN",
+    "UP",
+    "PAGE_UP",
+    "PAGE_DOWN",
+    "HOME",
+    "END",
+    "CAPS_LOCK",
+    "SCROLL_LOCK",
+    "NUM_LOCK",
+    "PRINT_SCREEN",
+    "PAUSE",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "KP_0",
+    "KP_1",
+    "KP_2",
+    "KP_3",
+    "KP_4",
+    "KP_5",
+    "KP_6",
+    "KP_7",
+    "KP_8",
+    "KP_9",
+    "KP_DECIMAL",
+    "KP_DIVIDE",
+    "KP_MULTIPLY",
+    "KP_SUBTRACT",
+    "KP_ADD",
+    "KP_ENTER",
+    "KP_EQUAL",
+    "LEFT_SHIFT",
+    "LEFT_CONTROL",
+    "LEFT_ALT",
+    "LEFT_SUPER",
+    "RIGHT_SHIFT",
+    "RIGHT_CONTROL",
+    "RIGHT_ALT",
+    "RIGHT_SUPER",
+    "KB_MENU",
+};
+#define RL_NKEYS ((int)(sizeof(RL_KEY_CODES)/sizeof(RL_KEY_CODES[0])))
+
+static const char* rl_key_name (int key) {
+    for (int i=0; i<RL_NKEYS; i++) {
+        if (RL_KEY_CODES[i] == key) {
+            return RL_KEY_NAMES[i];
+        }
+    }
+    return NULL;
+}
+
+// A key as a code, from a number or from a name ('RIGHT', 'P').
+static int rl_key (AVal k) {
+    if (a_isnum(k)) {
+        return (int) a_dbl(k);
+    }
+    if (k.type == A_STR) {
+        for (int i=0; i<RL_NKEYS; i++) {
+            if (!strcmp(RL_KEY_NAMES[i], A_STR_OF(k)->s)) {
+                return RL_KEY_CODES[i];
+            }
+        }
+    }
+    return 0;
+}
+
+// 0xRRGGBBAA as a color.
+static Color rl_color (AVal c) {
+    uint32_t v = a_isnum(c) ? (uint32_t)(int64_t)a_dbl(c) : 0xFFFFFFFF;
+    return (Color) { (v>>24)&0xFF, (v>>16)&0xFF, (v>>8)&0xFF, v&0xFF };
+}
+
+static AVal rl_rgba (Color c) {
+    return a_int(((int64_t)c.r<<24) | ((int64_t)c.g<<16) | ((int64_t)c.b<<8) | c.a);
+}
+
+#define RL_F(v) ((float)a_dbl(v))
+#define RL_I(v) ((int)a_dbl(v))
+
+// Field of a table as a number, or `def`.
+static double rl_fld (AVal t, const char* k, double def) {
+    if (t.type != A_TAB) {
+        return def;
+    }
+    AVal key = a_strz(k);
+    AVal v = a_tab_get(A_TAB_OF(t), key);
+    a_dec(key);
+    return a_isnum(v) ? a_dbl(v) : def;
+}
+
+// Field of a table as a C string, or `def`.
+static const char* rl_str (AVal t, const char* k, const char* def) {
+    if (t.type != A_TAB) {
+        return def;
+    }
+    AVal key = a_strz(k);
+    AVal v = a_tab_get(A_TAB_OF(t), key);
+    a_dec(key);
+    return (v.type == A_STR) ? A_STR_OF(v)->s : def;
+}
+
+static const char* rl_s (AVal s) {
+    return (s.type == A_STR) ? A_STR_OF(s)->s : "";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// DRIVER
+///////////////////////////////////////////////////////////////////////////////
+
+static void rl_set (AVal t, const char* k, AVal v) {
+    AVal key = a_strz(k);
+    a_setindex(t, key, v);
+    a_dec(key);
+    a_dec(v);
+}
+
+// Emits `:tag`, or `:tag [fields]` if `evt` is a table.
+static AStatus rl_emit (const char* tag, AVal evt) {
+    AVal t = a_strz(tag);
+    if (evt.type == A_TAB) {
+        a_tag(evt, t);
+        a_dec(t);
+        t = evt;
+    }
+    AStatus st = atm_emit(t);
+    a_dec(t);
+    return st;
+}
+
+static AStatus rl_emit_key (const char* tag, int key) {
+    AVal e = a_tab();
+    rl_set(e, "key", a_int(key));
+    const char* name = rl_key_name(key);
+    if (name != NULL) {
+        rl_set(e, "name", a_strz(name));
+    }
+    return rl_emit(tag, e);
+}
+
+static AStatus rl_emit_mouse (const char* tag, int button) {
+    Vector2 p = GetMousePosition();
+    AVal e = a_tab();
+    rl_set(e, "button", a_int(button));
+    rl_set(e, "x", a_num(p.x));
+    rl_set(e, "y", a_num(p.y));
+    return rl_emit(tag, e);
+}
+
+// The input of this frame, as events: keys pressed in their order, keys
+// released, mouse buttons, wheel.
+static AStatus rl_input (void) {
+    AStatus st = A_OK;
+    int keys[64];
+    int n = 0;
+    for (int k=GetKeyPressed(); k!=0 && n<64; k=GetKeyPressed()) {
+        keys[n++] = k;
+    }
+    for (int i=0; i<n && st==A_OK; i++) {
+        st = rl_emit_key("rl.key.dn", keys[i]);
+    }
+    for (int i=0; i<RL_NKEYS && st==A_OK; i++) {
+        if (IsKeyReleased(RL_KEY_CODES[i])) {
+            st = rl_emit_key("rl.key.up", RL_KEY_CODES[i]);
+        }
+    }
+    for (int b=0; b<=MOUSE_BUTTON_BACK && st==A_OK; b++) {
+        if (IsMouseButtonPressed(b)) {
+            st = rl_emit_mouse("rl.mouse.dn", b);
+        }
+        if (st==A_OK && IsMouseButtonReleased(b)) {
+            st = rl_emit_mouse("rl.mouse.up", b);
+        }
+    }
+    float dy = GetMouseWheelMove();
+    if (st==A_OK && dy!=0.0f) {
+        AVal e = a_tab();
+        rl_set(e, "dy", a_num(dy));
+        st = rl_emit("rl.wheel", e);
+    }
+    return st;
+}
+
+int main (int argc, char** argv) {
+    atm_init(argc, argv);
+    AStatus st = atm_main();
+    if (st==A_OK && atm_alive() && !IsWindowReady()) {
+        st = a_error("raylib.atm : no window : call rl.window first");
+    }
+
+    int64_t prv = llround(GetTime() * 1e6);
+    while (st==A_OK && atm_alive()) {
+        if (WindowShouldClose()) {
+            st = rl_emit("rl.quit", a_nil());
+            break;
+        }
+        st = rl_input();
+        int64_t now = llround(GetTime() * 1e6);
+        if (st==A_OK && now>prv) {
+            st = atm_emit(a_int(now - prv));
+        }
+        prv = now;
+        if (st == A_OK) {
+            st = rl_emit("rl.frame", a_nil());
+        }
+        BeginDrawing();
+        if (st == A_OK) {
+            st = rl_emit("rl.draw", a_nil());
+        }
+        EndDrawing();
+    }
+
+    if (st == A_OK) {
+        st = atm_stop();
+    }
+    fflush(stdout);
+    if (st == A_ESCAPE) {
+        st = a_escape_err();
+    }
+    if (st != A_OK) {
+        a_error_dump();
+    }
+    atm_quit();
+    if (RltFrame != NULL && RltFrame() > 0) {
+        fprintf(stderr, "frames: %d\n", RltFrame() - 1);
+    }
+    if (IsWindowReady()) {
+        CloseWindow();
+    }
+    return (st == A_OK) ? 0 : 1;
+}
+```
+
+val rl = [
+    ;; rl.window [title=, width=, height=, fps=]: opens the window
+    window = func (t) {
+        `InitWindow((int)rl_fld($t,"width",800), (int)rl_fld($t,"height",450), rl_str($t,"title","Atmos"));`
+        `SetTargetFPS((int)rl_fld($t,"fps",60));`
+    },
+
+    ;; rl.width(), rl.height(): the size of the screen
+    width  = func () { `:number GetScreenWidth()`  },
+    height = func () { `:number GetScreenHeight()` },
+
+    ;; rl.frame(): the current frame in test mode (the first is 1), or -1
+    frame = func () {
+        `:number ((RltFrame != NULL) ? RltFrame() : -1)`
+    },
+
+    ;; await rl.Frames(n): n frames of logic (n times :rl.frame)
+    Frames = task (n) {
+        loop _ in n {
+            await :rl.frame
+        }
+    },
+
+    ;; Time
+    time       = func () { `:number GetTime()` },
+    frame_time = func () { `:number GetFrameTime()` },
+
+    ;; rl.random(min, max): GetRandomValue, both included
+    random = func (min, max) {
+        `:number GetRandomValue(RL_I($min), RL_I($max))`
+    },
+
+    ;; Input by polling: keys as codes or names ('RIGHT', 'P')
+    key_down     = func (k) { `:boolean IsKeyDown(rl_key($k))` },
+    key_pressed  = func (k) { `:boolean IsKeyPressed(rl_key($k))` },
+    key_released = func (k) { `:boolean IsKeyReleased(rl_key($k))` },
+    mouse_down   = func (b) { `:boolean IsMouseButtonDown(RL_I($b))` },
+    mouse_x      = func ()  { `:number GetMousePosition().x` },
+    mouse_y      = func ()  { `:number GetMousePosition().y` },
+
+    ;; Colors
+    color = func (r, g, b, a) {
+        `:value rl_rgba((Color){ RL_I($r), RL_I($g), RL_I($b), RL_I($a) })`
+    },
+    fade = func (c, alpha) {
+        `:value rl_rgba(Fade(rl_color($c), RL_F($alpha)))`
+    },
+
+    ;; Drawing (inside :rl.draw)
+    clear = func (c) {
+        `ClearBackground(rl_color($c));`
+    },
+    pixel = func (x, y, c) {
+        `DrawPixel(RL_I($x), RL_I($y), rl_color($c));`
+    },
+    line = func (x1, y1, x2, y2, c) {
+        `DrawLine(RL_I($x1), RL_I($y1), RL_I($x2), RL_I($y2), rl_color($c));`
+    },
+    line_v = func (x1, y1, x2, y2, c) {
+        `DrawLineV((Vector2){RL_F($x1),RL_F($y1)}, (Vector2){RL_F($x2),RL_F($y2)}, rl_color($c));`
+    },
+    circle = func (x, y, r, c) {
+        `DrawCircle(RL_I($x), RL_I($y), RL_F($r), rl_color($c));`
+    },
+    circle_v = func (x, y, r, c) {
+        `DrawCircleV((Vector2){RL_F($x),RL_F($y)}, RL_F($r), rl_color($c));`
+    },
+    rectangle = func (x, y, w, h, c) {
+        `DrawRectangle(RL_I($x), RL_I($y), RL_I($w), RL_I($h), rl_color($c));`
+    },
+    rectangle_v = func (x, y, w, h, c) {
+        `DrawRectangleV((Vector2){RL_F($x),RL_F($y)}, (Vector2){RL_F($w),RL_F($h)}, rl_color($c));`
+    },
+    rectangle_lines = func (x, y, w, h, c) {
+        `DrawRectangleLines(RL_I($x), RL_I($y), RL_I($w), RL_I($h), rl_color($c));`
+    },
+    triangle = func (x1, y1, x2, y2, x3, y3, c) {
+        `DrawTriangle((Vector2){RL_F($x1),RL_F($y1)}, (Vector2){RL_F($x2),RL_F($y2)}, (Vector2){RL_F($x3),RL_F($y3)}, rl_color($c));`
+    },
+
+    ;; Text with the default font
+    text = func (s, x, y, size, c) {
+        `DrawText(rl_s($s), RL_I($x), RL_I($y), RL_I($size), rl_color($c));`
+    },
+    measure = func (s, size) {
+        `:number MeasureText(rl_s($s), RL_I($size))`
+    },
+
+    ;; rl.KEY.RIGHT: the codes of the keys
+    KEY = [
+        APOSTROPHE = 39,
+        COMMA = 44,
+        MINUS = 45,
+        PERIOD = 46,
+        SLASH = 47,
+        ZERO = 48,
+        ONE = 49,
+        TWO = 50,
+        THREE = 51,
+        FOUR = 52,
+        FIVE = 53,
+        SIX = 54,
+        SEVEN = 55,
+        EIGHT = 56,
+        NINE = 57,
+        SEMICOLON = 59,
+        EQUAL = 61,
+        A = 65,
+        B = 66,
+        C = 67,
+        D = 68,
+        E = 69,
+        F = 70,
+        G = 71,
+        H = 72,
+        I = 73,
+        J = 74,
+        K = 75,
+        L = 76,
+        M = 77,
+        N = 78,
+        O = 79,
+        P = 80,
+        Q = 81,
+        R = 82,
+        S = 83,
+        T = 84,
+        U = 85,
+        V = 86,
+        W = 87,
+        X = 88,
+        Y = 89,
+        Z = 90,
+        LEFT_BRACKET = 91,
+        BACKSLASH = 92,
+        RIGHT_BRACKET = 93,
+        GRAVE = 96,
+        SPACE = 32,
+        ESCAPE = 256,
+        ENTER = 257,
+        TAB = 258,
+        BACKSPACE = 259,
+        INSERT = 260,
+        DELETE = 261,
+        RIGHT = 262,
+        LEFT = 263,
+        DOWN = 264,
+        UP = 265,
+        PAGE_UP = 266,
+        PAGE_DOWN = 267,
+        HOME = 268,
+        END = 269,
+        CAPS_LOCK = 280,
+        SCROLL_LOCK = 281,
+        NUM_LOCK = 282,
+        PRINT_SCREEN = 283,
+        PAUSE = 284,
+        F1 = 290,
+        F2 = 291,
+        F3 = 292,
+        F4 = 293,
+        F5 = 294,
+        F6 = 295,
+        F7 = 296,
+        F8 = 297,
+        F9 = 298,
+        F10 = 299,
+        F11 = 300,
+        F12 = 301,
+        LEFT_SHIFT = 340,
+        LEFT_CONTROL = 341,
+        LEFT_ALT = 342,
+        LEFT_SUPER = 343,
+        RIGHT_SHIFT = 344,
+        RIGHT_CONTROL = 345,
+        RIGHT_ALT = 346,
+        RIGHT_SUPER = 347,
+        KB_MENU = 348,
+        KP_0 = 320,
+        KP_1 = 321,
+        KP_2 = 322,
+        KP_3 = 323,
+        KP_4 = 324,
+        KP_5 = 325,
+        KP_6 = 326,
+        KP_7 = 327,
+        KP_8 = 328,
+        KP_9 = 329,
+        KP_DECIMAL = 330,
+        KP_DIVIDE = 331,
+        KP_MULTIPLY = 332,
+        KP_SUBTRACT = 333,
+        KP_ADD = 334,
+        KP_ENTER = 335,
+        KP_EQUAL = 336,
+        BACK = 4,
+        MENU = 5,
+        VOLUME_UP = 24,
+        VOLUME_DOWN = 25,
+    ],
+
+    ;; The colors of raylib
+    LIGHTGRAY = 0xC8C8C8FF,
+    GRAY = 0x828282FF,
+    DARKGRAY = 0x505050FF,
+    YELLOW = 0xFDF900FF,
+    GOLD = 0xFFCB00FF,
+    ORANGE = 0xFFA100FF,
+    PINK = 0xFF6DC2FF,
+    RED = 0xE62937FF,
+    MAROON = 0xBE2137FF,
+    GREEN = 0x00E430FF,
+    LIME = 0x009E2FFF,
+    DARKGREEN = 0x00752CFF,
+    SKYBLUE = 0x66BFFFFF,
+    BLUE = 0x0079F1FF,
+    DARKBLUE = 0x0052ACFF,
+    PURPLE = 0xC87AFFFF,
+    VIOLET = 0x873CBEFF,
+    DARKPURPLE = 0x701F7EFF,
+    BEIGE = 0xD3B083FF,
+    BROWN = 0x7F6A4FFF,
+    DARKBROWN = 0x4C3F2FFF,
+    WHITE = 0xFFFFFFFF,
+    BLACK = 0x000000FF,
+    BLANK = 0x00000000,
+    MAGENTA = 0xFF00FFFF,
+    RAYWHITE = 0xF5F5F5FF,
+]

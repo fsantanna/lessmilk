@@ -1,0 +1,266 @@
+diff --git a/src/external/rlsw.h b/src/external/rlsw.h
+index 68639f3..da01a48 100644
+--- a/src/external/rlsw.h
++++ b/src/external/rlsw.h
+@@ -776,7 +776,7 @@ SWAPI void swGetFramebufferAttachmentParameteriv(SWattachment attachment, SWatta
+ #define RLSW_SUPPORT_LOG_INFO
+ #if defined(RLSW_SUPPORT_LOG_INFO)
+     #include <stdio.h>
+-    #define SW_LOG(...) printf(__VA_ARGS__)
++    #define SW_LOG(...) fprintf(stderr, __VA_ARGS__)   // Atmos port: stdout is for traces
+ #else
+     #define SW_LOG(...)
+ #endif
+diff --git a/src/platforms/rcore_memory.c b/src/platforms/rcore_memory.c
+index 5d9461c..a95f573 100644
+--- a/src/platforms/rcore_memory.c
++++ b/src/platforms/rcore_memory.c
+@@ -95,6 +95,148 @@ static int kbhit(void);                         // Check if key has been pressed
+ static char getch(void) { return getchar(); }   // Get pressed character
+ #endif
+ 
++
++//----------------------------------------------------------------------------------
++// Test mode (added for the Atmos port, see fsantanna/raylib, tools/raylib.patch)
++//----------------------------------------------------------------------------------
++// Active when RL_FRAMES is set. The original games and their ports read the
++// same variables, so that both run the same frames with the same input:
++//
++//      RL_FRAMES=n[:ms]    runs n frames with a fixed time step (default 1/60 s),
++//                          with no waits, then WindowShouldClose() is true
++//      RL_SEED=s           the seed of the random generator (default 1)
++//      RL_INPUT=f:op,...   input applied before frame f (the first frame is 1):
++//                              f:dn:KEY  f:up:KEY      key down/up (RIGHT, A, 7, 257)
++//                              f:mv:X:Y                mouse moves to X,Y
++//                              f:md:B  f:mu:B          mouse button B down/up (0 left)
++//                              f:wh:D                  mouse wheel moves D
++//      RL_SHOT=f:file.png,...  saves the screen at the end of frame f
++//
++static struct {
++    int on;             // test mode active
++    int frames;         // frames to run
++    double dt;          // time step
++    int frame;          // current frame (starts at 1)
++    long ticks;         // frames presented
++} rlt = { 0 };
++
++static int rlt_key (const char *s)
++{
++    static const struct { const char *name; int key; } KEYS[] = {
++        { "SPACE", KEY_SPACE }, { "ESCAPE", KEY_ESCAPE }, { "ENTER", KEY_ENTER },
++        { "TAB", KEY_TAB }, { "BACKSPACE", KEY_BACKSPACE }, { "DELETE", KEY_DELETE },
++        { "RIGHT", KEY_RIGHT }, { "LEFT", KEY_LEFT }, { "DOWN", KEY_DOWN }, { "UP", KEY_UP },
++        { "LEFT_SHIFT", KEY_LEFT_SHIFT }, { "LEFT_CONTROL", KEY_LEFT_CONTROL },
++        { "LEFT_ALT", KEY_LEFT_ALT }, { "RIGHT_SHIFT", KEY_RIGHT_SHIFT },
++        { "RIGHT_CONTROL", KEY_RIGHT_CONTROL }, { "RIGHT_ALT", KEY_RIGHT_ALT },
++        { NULL, 0 }
++    };
++    for (int i = 0; KEYS[i].name != NULL; i++) if (strcmp(KEYS[i].name, s) == 0) return KEYS[i].key;
++    if ((s[0] != '\0') && (s[1] == '\0') && (((s[0] >= 'A') && (s[0] <= 'Z')) || ((s[0] >= '0') && (s[0] <= '9')))) return s[0];
++    return atoi(s);
++}
++
++// Applies the entries of RL_INPUT due at `frame`.
++static void rlt_input (int frame)
++{
++    const char *s = getenv("RL_INPUT");
++    while ((s != NULL) && (*s != '\0'))
++    {
++        char item[128] = { 0 };
++        size_t n = strcspn(s, ",");
++        snprintf(item, sizeof(item), "%.*s", (int)n, s);
++        s += n + (s[n] == ',');
++
++        char *op = strchr(item, ':');
++        if ((op == NULL) || (atoi(item) != frame)) continue;
++        op++;
++        char *arg = strchr(op, ':');
++        if (arg == NULL) continue;
++        *arg++ = '\0';
++
++        if (strcmp(op, "dn") == 0)
++        {
++            int key = rlt_key(arg);
++            if ((key <= 0) || (key >= MAX_KEYBOARD_KEYS)) continue;
++            CORE.Input.Keyboard.currentKeyState[key] = 1;
++            if (CORE.Input.Keyboard.keyPressedQueueCount < MAX_KEY_PRESSED_QUEUE)
++                CORE.Input.Keyboard.keyPressedQueue[CORE.Input.Keyboard.keyPressedQueueCount++] = key;
++            if ((key >= 32) && (key <= 126) && (CORE.Input.Keyboard.charPressedQueueCount < MAX_CHAR_PRESSED_QUEUE))
++                CORE.Input.Keyboard.charPressedQueue[CORE.Input.Keyboard.charPressedQueueCount++] = key;
++            if (key == CORE.Input.Keyboard.exitKey) CORE.Window.shouldClose = true;
++        }
++        else if (strcmp(op, "up") == 0)
++        {
++            int key = rlt_key(arg);
++            if ((key > 0) && (key < MAX_KEYBOARD_KEYS)) CORE.Input.Keyboard.currentKeyState[key] = 0;
++        }
++        else if (strcmp(op, "mv") == 0)
++        {
++            int x = 0, y = 0;
++            sscanf(arg, "%d:%d", &x, &y);
++            CORE.Input.Mouse.currentPosition = (Vector2){ (float)x, (float)y };
++            CORE.Input.Touch.position[0] = CORE.Input.Mouse.currentPosition;
++        }
++        else if ((strcmp(op, "md") == 0) || (strcmp(op, "mu") == 0))
++        {
++            int b = atoi(arg);
++            if ((b >= 0) && (b < MAX_MOUSE_BUTTONS)) CORE.Input.Mouse.currentButtonState[b] = (op[1] == 'd');
++            if (b == 0) CORE.Input.Touch.currentTouchState[0] = (op[1] == 'd');
++        }
++        else if (strcmp(op, "wh") == 0)
++        {
++            CORE.Input.Mouse.currentWheelMove.y = (float)atof(arg);
++        }
++    }
++}
++
++// Saves the screen if RL_SHOT asks for `frame`.
++static void rlt_shot (int frame)
++{
++    const char *s = getenv("RL_SHOT");
++    while ((s != NULL) && (*s != '\0'))
++    {
++        char item[512] = { 0 };
++        size_t n = strcspn(s, ",");
++        snprintf(item, sizeof(item), "%.*s", (int)n, s);
++        s += n + (s[n] == ',');
++
++        char *path = strchr(item, ':');
++        if ((path == NULL) || (atoi(item) != frame)) continue;
++        // The framebuffer comes out in BGRA (RLSW_FRAMEBUFFER_OUTPUT_BGRA): back to RGBA
++        int count = CORE.Window.render.width*CORE.Window.render.height;
++        unsigned char *rgba = (unsigned char *)RL_MALLOC(count*4);
++        const unsigned char *bgra = (const unsigned char *)platform.pixels;
++        for (int i = 0; i < count; i++)
++        {
++            rgba[4*i + 0] = bgra[4*i + 2];
++            rgba[4*i + 1] = bgra[4*i + 1];
++            rgba[4*i + 2] = bgra[4*i + 0];
++            rgba[4*i + 3] = bgra[4*i + 3];
++        }
++        Image img = { rgba, CORE.Window.render.width, CORE.Window.render.height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
++        ExportImage(img, path + 1);
++        RL_FREE(rgba);
++    }
++}
++
++static void rlt_init (void)
++{
++    const char *s = getenv("RL_FRAMES");
++    if (s == NULL) return;
++    double ms = 0.0;
++    rlt.on = 1;
++    rlt.frame = 1;
++    sscanf(s, "%d:%lf", &rlt.frames, &ms);
++    rlt.dt = (ms > 0.0) ? ms/1000.0 : 1.0/60.0;
++}
++
++// Frames run so far, or -1 out of the test mode.
++int RltFrame (void)
++{
++    return rlt.on ? rlt.frame : -1;
++}
++
+ //----------------------------------------------------------------------------------
+ // Module Functions Definition: Window and Graphics Device
+ //----------------------------------------------------------------------------------
+@@ -102,6 +244,7 @@ static char getch(void) { return getchar(); }   // Get pressed character
+ // Check if application should close
+ bool WindowShouldClose(void)
+ {
++    if (rlt.on && (rlt.frames > 0) && (rlt.frame > rlt.frames)) return true;
+     if (CORE.Window.ready) return CORE.Window.shouldClose;
+     else return true;
+ }
+@@ -353,6 +496,12 @@ void SwapScreenBuffer(void)
+ {
+     // Update framebuffer
+     rlCopyFramebuffer(0, 0, CORE.Window.render.width, CORE.Window.render.height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, platform.pixels);
++
++    if (rlt.on)
++    {
++        rlt_shot(rlt.frame);
++        rlt.ticks++;
++    }
+ }
+ 
+ //----------------------------------------------------------------------------------
+@@ -363,6 +512,7 @@ void SwapScreenBuffer(void)
+ double GetTime(void)
+ {
+     double time = 0.0;
++    if (rlt.on) return (double)rlt.ticks*rlt.dt;
+ #if defined(_WIN32)
+     LARGE_INTEGER currentTicks = { 0 };
+     QueryPerformanceCounter(&currentTicks);
+@@ -465,12 +615,25 @@ void PollInputEvents(void)
+ 
+     // Register previous keys states
+     // NOTE: Android supports up to 260 keys
+-    for (int i = 0; i < 260; i++)
++    for (int i = 0; i < MAX_KEYBOARD_KEYS; i++)     // Atmos port: was 260, which left out the arrows (262-265)
+     {
+         CORE.Input.Keyboard.previousKeyState[i] = CORE.Input.Keyboard.currentKeyState[i];
+         CORE.Input.Keyboard.keyRepeatInFrame[i] = 0;
+     }
+ 
++    // Register previous mouse states
++    CORE.Input.Mouse.previousWheelMove = CORE.Input.Mouse.currentWheelMove;
++    CORE.Input.Mouse.currentWheelMove = (Vector2){ 0.0f, 0.0f };
++    for (int i = 0; i < MAX_MOUSE_BUTTONS; i++) CORE.Input.Mouse.previousButtonState[i] = CORE.Input.Mouse.currentButtonState[i];
++    CORE.Input.Mouse.previousPosition = CORE.Input.Mouse.currentPosition;
++
++    if (rlt.on)
++    {
++        rlt.frame++;
++        rlt_input(rlt.frame);
++        return;
++    }
++
+     // TODO: Poll input events for current platform
+ 
+     // Check for key pressed to exit
+@@ -539,6 +702,8 @@ int InitPlatform(void)
+     CORE.Time.base = time.QuadPart;
+ #endif
+     InitTimer();
++    rlt_init();
++    if (rlt.on) rlt_input(1);
+     //----------------------------------------------------------------------------
+ 
+     // Initialize storage system
+diff --git a/src/rcore.c b/src/rcore.c
+index b5875c6..84474a0 100644
+--- a/src/rcore.c
++++ b/src/rcore.c
+@@ -584,6 +584,9 @@ const char *TextFormat(const char *text, ...); // Formatting of text with variab
+ // Initialize window and OpenGL context
+ void InitWindow(int width, int height, const char *title)
+ {
++#if defined(PLATFORM_MEMORY)
++    if (getenv("RL_FRAMES") != NULL) SetTraceLogLevel(LOG_WARNING);  // Test mode: stdout is for traces
++#endif
+     TRACELOG(LOG_INFO, "Initializing raylib %s", RAYLIB_VERSION);
+ 
+ #if defined(PLATFORM_DESKTOP_GLFW)
+@@ -712,6 +715,10 @@ void InitWindow(int width, int height, const char *title)
+     CORE.Window.shouldClose = false;
+ 
+     // Initialize random seed using available timer source instead of standard time() on embedded platforms
++    #if defined(PLATFORM_MEMORY)
++    if (rlt.on) SetRandomSeed((getenv("RL_SEED") != NULL)? (unsigned int)atol(getenv("RL_SEED")) : 1);
++    else
++    #endif
+     #ifndef PICO_RP2350
+     SetRandomSeed((unsigned int)time(NULL));
+     #else
+@@ -1649,6 +1656,9 @@ float GetFrameTime(void)
+ void WaitTime(double seconds)
+ {
+     if (seconds < 0) return;    // Security check
++#if defined(PLATFORM_MEMORY)
++    if (rlt.on) return;         // Test mode: no waits
++#endif
+ 
+ #if SUPPORT_BUSY_WAIT_LOOP || SUPPORT_PARTIALBUSY_WAIT_LOOP
+     double destinationTime = GetTime() + seconds;
