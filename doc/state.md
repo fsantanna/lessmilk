@@ -26,3 +26,22 @@ or a task.
 Control: 4 in the JavaScript (`enemyTime`, `scoreTime`, `firstKey`, and
 `time` of Over), 0 in the port. Left in the port for the trace only:
 `screen`, which the game never reads.
+
+## 3. Box Jump
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `w`, `h`, `map` | constant | `W`, `H`, `MAP` (`map.atm`) |
+| `death` (global) | data: shown in Play and in End | `death`, a global of the port too |
+| `this.level` (Play) | data: the level shown | `Box.level` |
+| `this.start` (Play) | control: before the first jump, the player does not run | two loops in sequence: the update before the first jump, and after it |
+| `this.rotation` (Play) | control: the tween of the last jump, paused when the player starts again | a table `ctl` given to `Motion`, kept in `rotation`, whose `stop` pauses it |
+| `player.alive` | control: after a hit, no other hit until the player lands | the same flag: Phaser's `sprite.alive`, which also keeps the body out of the overlaps; set in the update, as in the original |
+| `this.player`, `this.line`, `this.cubes`, labels | drawn | locals of `Play`; the cubes are tasks in a pool, aborted when the level changes |
+| `this.emitter` | particles | an `Emitter` and its task (`lib/particles.atm`) |
+| `this.spaceKey` | input | `keys = Cursor()` |
+| `this.hit_s`, `this.jump_s` | sounds | `SND_HIT`, `SND_JUMP` |
+
+Control: 3 in the JavaScript (`start`, `rotation`, `alive`), 2 left in the
+port (`rotation`, now a control table rather than a tween, and `alive`, which
+the physics reads).
