@@ -88,6 +88,7 @@ task Play () {
     score
 }
 
+;; [trace]
 ;; the line of the trace: as tools/original/trace/1.js
 func trace () {
     val f = rl.frame()
@@ -108,3 +109,4 @@ func trace () {
         tostring(f) ++ " " ++ screen ++ " " ++ tostring(score)
     }
 }
+;; [/trace]
