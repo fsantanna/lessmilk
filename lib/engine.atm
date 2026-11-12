@@ -1,7 +1,8 @@
-;; The engine of the port, over env/raylib.atm: what Phaser gave the games
-;; and raylib.atm does not have (yet): images and sheets drawn with rotation,
-;; scale, anchor and alpha; text in a TTF font, measured and anchored; sounds;
-;; and the random generator of the harness of the originals.
+;; The engine of the port, over env/raylib.atm: what Phaser gave the games,
+;; over the textures, sounds, and drawing of raylib.atm: images and sheets
+;; loaded once per path, and drawn with rotation, scale, anchor and alpha;
+;; text as Pixi lays it out, in a TTF font at a size; sounds; the clock of
+;; Phaser; and the random generator of the harness of the originals.
 ;;
 ;;      include "../lib/engine.atm"
 ;;
@@ -28,59 +29,10 @@ static double eng_random (void) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// IMAGES: loaded once per path
+// FONTS: one per path and size
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ENG_MAX 256
-
-static struct { char* path; Texture2D tex; } eng_imgs[ENG_MAX];
-static int eng_nimgs = 0;
-
-static int eng_image (const char* path) {
-    for (int i=0; i<eng_nimgs; i++) {
-        if (strcmp(eng_imgs[i].path, path) == 0) {
-            return i;
-        }
-    }
-    if (eng_nimgs == ENG_MAX) {
-        return -1;
-    }
-    Texture2D t = LoadTexture(path);
-    if (t.id == 0) {
-        return -1;
-    }
-    eng_imgs[eng_nimgs].path = strdup(path);
-    eng_imgs[eng_nimgs].tex  = t;
-    return eng_nimgs++;
-}
-
-// Frame "frame" of a sheet of frames of fw x fh (left to right, then top
-// to bottom), with its anchor (ax,ay) at (x,y), rotated by "angle" degrees
-// around the anchor, scaled by (sx,sy), with "alpha" from 0 to 1.
-static void eng_draw (int id, double fw, double fh, int frame,
-                      double x, double y, double ax, double ay,
-                      double angle, double sx, double sy, double alpha) {
-    if (id < 0 || id >= eng_nimgs) {
-        return;
-    }
-    Texture2D t = eng_imgs[id].tex;
-    int cols = (int)(t.width / fw);
-    if (cols < 1) cols = 1;
-    Rectangle src = { (float)((frame % cols) * fw), (float)((frame / cols) * fh),
-                      (float)fw, (float)fh };
-    if (sx < 0) src.width  = -src.width;
-    if (sy < 0) src.height = -src.height;
-    double w = fw * fabs(sx);
-    double h = fh * fabs(sy);
-    Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-    Vector2 org = { (float)(ax * w), (float)(ay * h) };
-    unsigned char a = (unsigned char)(alpha <= 0 ? 0 : alpha >= 1 ? 255 : alpha * 255 + 0.5);
-    DrawTexturePro(t, src, dst, org, (float)angle, (Color){ 255, 255, 255, a });
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// FONTS: one per path and size
-///////////////////////////////////////////////////////////////////////////////
 
 static struct { char* path; int size; Font font; } eng_fonts[ENG_MAX];
 static int eng_nfonts = 0;
@@ -157,49 +109,17 @@ static double eng_text (const char* path, int size, const char* s,
     return w;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// SOUNDS: with no audio device (as in the tests), they do nothing
-///////////////////////////////////////////////////////////////////////////////
-
-static struct { char* path; Sound snd; } eng_snds[ENG_MAX];
-static int eng_nsnds = 0;
-static int eng_audio = -1;      // -1 not tried, 0 no device, 1 ok
-
-static int eng_sound (const char* path) {
-    if (eng_audio == -1) {
-        eng_audio = 0;
-        if (getenv("RL_FRAMES") == NULL) {
-            InitAudioDevice();
-            eng_audio = IsAudioDeviceReady() ? 1 : 0;
-        }
-    }
-    for (int i=0; i<eng_nsnds; i++) {
-        if (strcmp(eng_snds[i].path, path) == 0) {
-            return i;
-        }
-    }
-    if (eng_nsnds == ENG_MAX) {
-        return -1;
-    }
-    eng_snds[eng_nsnds].path = strdup(path);
-    if (eng_audio == 1) {
-        eng_snds[eng_nsnds].snd = LoadSound(path);
-    }
-    return eng_nsnds++;
-}
-
-static void eng_play (int id, double volume) {
-    if (eng_audio==1 && id>=0 && id<eng_nsnds) {
-        SetSoundVolume(eng_snds[id].snd, (float)volume);
-        PlaySound(eng_snds[id].snd);
-    }
-}
 ```
 
 ;; The font of the originals: they ask for Arial, which the browser draws
 ;; with Liberation Sans, a font with the same metrics. Paths are relative to
 ;; the root of the repository, where the games run.
 val ENG_FONT = "lib/fonts/LiberationSans-Regular.ttf"
+
+;; the images and sounds, by path
+val ENG_IMAGES = []
+val ENG_SOUNDS = []
+val ENG_AUDIO  = [ tried = false ]
 
 val eng = [
 
@@ -232,26 +152,36 @@ val eng = [
         string.format("%." ++ tostring(n) ++ "f", x)
     },
 
-    ;; eng.image(path, [fw, fh]): an image, or a sheet of frames of fw x fh
+    ;; eng.image(path, [fw, fh]): an image, or a sheet of frames of fw x fh;
+    ;; loaded once per path (rl.texture)
     image = func (path, fw, fh) {
-        val id = `:number eng_image(rl_s($path))`
-        if id < 0 {
-            throw :error, "engine : cannot load image : " ++ path
+        val t = ENG_IMAGES@(path) || do {
+            val t = rl.texture(path)
+            if rl.texture_id(t) == 0 {
+                throw :error, "engine : cannot load image : " ++ path
+            }
+            set ENG_IMAGES@(path) = t
+            t
         }
-        val w = `:number eng_imgs[(int)a_dbl($id)].tex.width`
-        val h = `:number eng_imgs[(int)a_dbl($id)].tex.height`
-        :Image [ id=id, w=w, h=h, fw=fw || w, fh=fh || h ]
+        val w, h = (rl.texture_width(t), rl.texture_height(t))
+        :Image [ tex=t, w=w, h=h, fw=fw || w, fh=fh || h ]
     },
 
     ;; eng.draw(img, frame, x, y, [ax, ay, angle, sx, sy, alpha]):
-    ;; draws a frame of the image with its anchor at (x,y)
+    ;; draws a frame of the sheet (left to right, then top to bottom) with
+    ;; its anchor (ax,ay) at (x,y), rotated by `angle` degrees around the
+    ;; anchor, scaled by (sx,sy) (negative flips), with alpha from 0 to 1
     draw = func (img, frame, x, y, ax, ay, angle, sx, sy, alpha) {
-        val id, fw, fh = (img.id, img.fw, img.fh)
-        val ax_, ay_ = (ax || 0, ay || 0)
-        val an = angle || 0
+        val fw, fh = (img.fw, img.fh)
+        val cols = math.max(1, img.w // fw)
         val sx_, sy_ = (sx || 1, sy || 1)
+        val w, h = (fw * math.abs(sx_), fh * math.abs(sy_))
+        val sw = if sx_ < 0 => -fw => fw
+        val sh = if sy_ < 0 => -fh => fh
         val al = if alpha == nil => 1 => alpha
-        `eng_draw((int)a_dbl($id), a_dbl($fw), a_dbl($fh), (int)a_dbl($frame), a_dbl($x), a_dbl($y), a_dbl($ax_), a_dbl($ay_), a_dbl($an), a_dbl($sx_), a_dbl($sy_), a_dbl($al));`
+        val a = math.floor((math.max(0, math.min(1, al)) * 255) + 0.5)
+        rl.draw_texture_pro(img.tex, (frame % cols) * fw, (frame // cols) * fh, sw, sh,
+            x, y, w, h, (ax || 0) * w, (ay || 0) * h, angle || 0, 0xFFFFFF00 | a)
     },
 
     ;; eng.text(s, x, y, size, [color, ax, ay, align, alpha]): draws the text
@@ -270,13 +200,25 @@ val eng = [
         `:number eng_text(rl_s($f), (int)a_dbl($size), rl_s($s), 0, 0, 0, 0, 0, WHITE, 1, 0)`
     },
 
-    ;; eng.sound(path): a sound; eng.play(snd, [volume])
+    ;; eng.sound(path): a sound, loaded once per path (rl.sound); with no
+    ;; audio device, as in the tests, sounds do nothing
     sound = func (path) {
-        `:number eng_sound(rl_s($path))`
+        if !ENG_AUDIO.tried {
+            set ENG_AUDIO.tried = true
+            if !os.getenv("RL_FRAMES") {
+                rl.audio_init()
+            }
+        }
+        ENG_SOUNDS@(path) || do {
+            val snd = rl.sound(path)
+            set ENG_SOUNDS@(path) = snd
+            snd
+        }
     },
+    ;; eng.play(snd, [volume])
     play = func (snd, volume) {
-        val v = if volume == nil => 1 => volume
-        `eng_play((int)a_dbl($snd), a_dbl($v));`
+        rl.sound_volume(snd, if volume == nil => 1 => volume)
+        rl.play_sound(snd)
     },
 ]
 
