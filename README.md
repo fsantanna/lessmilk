@@ -43,6 +43,31 @@ same frames, with the same seed and the same input.
 | 11 | The Three Hearts |
 | 12 | Crazy Snake |
 
+## Build, run, test
+
+```sh
+tools/setup.sh                              # ext/: the compiler, raylib, the originals
+tools/atmos.sh games/run/main.atm out/run   # builds a game
+out/run                                     # plays it, from the root of the repository
+tst/run.sh                                  # the tests, with no screen (ASAN=1 too)
+tools/compare.sh run play                   # a run on the original and on the port
+```
+
+The originals run in Chromium with no screen, stepped by hand
+(`tools/original/`, with Playwright), so that a run of the port and of the
+original can be compared line by line. See [doc/fidelity.md](doc/fidelity.md).
+
+## State
+
+| # | Game | Port | Same as the original |
+|--:|------|------|----------------------|
+| 1 | Run! | `games/run` | yes, 3 runs |
+
+Documents: [table](doc/table.md), [state variables](doc/state.md),
+[fidelity](doc/fidelity.md), [compiler](doc/compiler.md),
+[from the reference Atmos](doc/from-reference.md), and one per game in
+[doc/games/](doc/games/).
+
 ## License
 
 The code of the port is under the MIT license (see [LICENSE](LICENSE)).
