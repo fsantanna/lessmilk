@@ -137,13 +137,17 @@ static double rdg_frac (void) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ENG_MAX 256
+// a font is loaded at about this size, whatever the size it is drawn at
+#define ENG_FONT_LOAD 180.0
 
-static struct { char* path; int size; Font font; } eng_fonts[ENG_MAX];
+static struct { char* path; int size; Font font; double draw; } eng_fonts[ENG_MAX];
 static int eng_nfonts = 0;
 
-static Font* eng_font (const char* path, int size, double scale) {
+// The font, and the size to draw it at (in *draw).
+static Font* eng_font (const char* path, int size, double scale, double* draw) {
     for (int i=0; i<eng_nfonts; i++) {
         if (eng_fonts[i].size==size && strcmp(eng_fonts[i].path, path)==0) {
+            *draw = eng_fonts[i].draw;
             return &eng_fonts[i].font;
         }
     }
@@ -151,12 +155,21 @@ static Font* eng_font (const char* path, int size, double scale) {
         return NULL;
     }
     // raylib scales a TTF so that ascent+descent is the size; the browser,
-    // so that the em is: (ascent+descent)/em
-    Font f = LoadFontEx(path, (int)round(size * scale), NULL, 0);
+    // so that the em is: (ascent+descent)/em. The font is loaded large, at
+    // about ENG_FONT_LOAD pixels, and drawn smaller: raylib rounds the
+    // advance of each glyph to whole pixels at the size it loads, and a
+    // sentence of 20 px loaded at 20 px came out 10% narrower than in the
+    // browser.
+    double want = size * scale;
+    int k = (int)round(ENG_FONT_LOAD / want);
+    if (k < 1) k = 1;
+    Font f = LoadFontEx(path, (int)round(want * k), NULL, 0);
     SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
     eng_fonts[eng_nfonts].path = strdup(path);
     eng_fonts[eng_nfonts].size = size;
     eng_fonts[eng_nfonts].font = f;
+    eng_fonts[eng_nfonts].draw = want;
+    *draw = want;
     return &eng_fonts[eng_nfonts++].font;
 }
 
@@ -176,7 +189,8 @@ static double eng_text (const char* path, double asc, double desc, double gap,
                         double upem, int size, const char* s,
                         double x, double y, double ax, double ay,
                         double align, Color c, double alpha, int draw) {
-    Font* f = eng_font(path, size, (asc + desc) / upem);
+    double fs;
+    Font* f = eng_font(path, size, (asc + desc) / upem, &fs);
     if (f == NULL) {
         return 0;
     }
@@ -194,7 +208,7 @@ static double eng_text (const char* path, double asc, double desc, double gap,
     }
     double w = 0;
     for (int i=0; i<n; i++) {
-        double lw = MeasureTextEx(*f, lines[i], (float)f->baseSize, 0).x;
+        double lw = MeasureTextEx(*f, lines[i], (float)fs, 0).x;
         if (lw > w) w = lw;
     }
     double lh = eng_line_height(size, asc, desc, gap, upem);
@@ -205,11 +219,11 @@ static double eng_text (const char* path, double asc, double desc, double gap,
         double x0 = x - ax * w;
         double y0 = y - ay * h;
         for (int i=0; i<n; i++) {
-            double lw = MeasureTextEx(*f, lines[i], (float)f->baseSize, 0).x;
+            double lw = MeasureTextEx(*f, lines[i], (float)fs, 0).x;
             // the browser draws a line higher than raylib does, by about 0.12
             // of the size: measured 4 px at 30 px and 2 px at 20 px (Run!)
             Vector2 p = { (float)(x0 + align*(w - lw)), (float)(y0 + i*lh - round(size*0.12)) };
-            DrawTextEx(*f, lines[i], p, (float)f->baseSize, 0, c);
+            DrawTextEx(*f, lines[i], p, (float)fs, 0, c);
         }
     }
     return w;

@@ -600,3 +600,13 @@ func group_draw (g) {
         }
     }
 }
+
+;; getFirstDead(): the first slot whose sprite is not alive, or nil
+func group_first_not_alive (g) {
+    loop _, x in g.slots {
+        if !x.s.alive {
+            return x
+        }
+    }
+    nil
+}

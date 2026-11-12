@@ -1,0 +1,188 @@
+;; Play: the bad one turns around the circle; a level of rabbits each turn.
+
+val IMG_RABBIT = eng.image(A ++ "images/rabbit2.png")
+val SND_MUSIC = eng.sound(A ++ "sounds/music.wav")
+val SND_HAHO  = eng.sound(A ++ "sounds/haho.mp3")
+val SND_VOWELS = [
+    eng.sound(A ++ "sounds/a.mp3"), eng.sound(A ++ "sounds/e.mp3"),
+    eng.sound(A ++ "sounds/i.mp3"), eng.sound(A ++ "sounds/o.mp3"),
+    eng.sound(A ++ "sounds/u.mp3"),
+]
+
+;; a rabbit comes to the circle: its tween is running until it is there
+task Enter (r, x, y) {
+    set r.entering = true
+    await Motion(r, [x=x, y=y], 300)
+    set r.entering = false
+}
+
+;; a rabbit jumps over the bad one and comes back: two tweens, chained
+task Jump (r, x, y, bx, by) {
+    await Motion(r, [x=x, y=y], 400)
+    await Motion(r, [x=bx, y=by], 600)
+}
+
+;; a rabbit of the last level fades, and then dies
+task Fade (r) {
+    await Motion(r, [alpha=0], 300)
+    sprite_kill(r)
+}
+
+task Play () {
+    val rabbits = Group(IMG_RABBIT, 30, :rabbit)
+    val bad = Sprite(IMG_BAD, W/2, H/2)
+    set bad.ax, bad.ay = (0.5, 1)
+    sprite_add(bad, :walk, [0, 1], 5, true)
+    sprite_play(bad, :walk)
+    val bbody = Body(bad, :bad)
+    val circle = Sprite(IMG_CIRCLE, W/2, H/2)
+    set circle.ax, circle.ay = (0.5, 0.5)
+    defer {
+        group_remove(rabbits)
+        body_remove(bbody)
+    }
+    val start = Text((W/2) + 0.5, 30, "try to save the rabbits by pressing space", 20, 0.5)
+    set start.ax, start.ay = (0.5, 0.5)
+    val world = Text(W/2, H/2, "10", 80, 0.5)
+    set world.ax, world.ay = (0.5, 0.5)
+    set score, level = (65, 0)
+    eng.play(SND_MUSIC, 0.4)
+    pin tweens = tasks()
+    val cw = IMG_CIRCLE.fw          ;; circle.width
+
+    ;; [trace]
+    set Rab.play = [ bad=bad, rabbits=rabbits ]
+    ;; [/trace]
+
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            group_draw(rabbits)
+            sprite_draw(bad)
+            sprite_draw(circle)
+            text_draw(start)
+            text_draw(world)
+        }
+    }
+    spawn {
+        loop on :pre {
+            sprite_update(bad)
+        }
+    }
+
+    ;; add_rabbit
+    val func add_rabbit (angle, i) {
+        val x = group_first_not_alive(rabbits)
+        val r = x.s
+        set r.rot = angle + (math.pi / 2)
+        val x_out = (W/2) + ((cw + 100) * math.cos(angle))
+        val y_out = (H/2) + ((cw + 100) * math.sin(angle))
+        val x_in = (W/2) + (((cw / 2) - 2) * math.cos(angle))
+        val y_in = (H/2) + (((cw / 2) - 2) * math.sin(angle))
+        set r.jump = false
+        set r.alpha = 1
+        set r.pos = i
+        sprite_reset(r, x.b, x_out, y_out)
+        set r.ax, r.ay = (0.5, 1)
+        spawn @tweens Enter(r, x_in, y_in)
+    }
+
+    ;; draw_level: the rabbits left fade; :end after the last level
+    val func draw_level () {
+        loop _, x in rabbits.slots {
+            if x.s.alive {
+                spawn @tweens Fade(x.s)
+            }
+        }
+        set world.s = tostring(9 - level)
+        if level == 9 {
+            return :end
+        }
+        if level == 1 {
+            spawn @tweens Motion(start, [alpha=0], 500)
+        }
+        loop i, k in MAP@(level) {
+            if k != 0 {
+                add_rabbit(i * (math.pi / 10), i)
+            }
+        }
+        set level += 1
+        nil
+    }
+
+    ;; jump: SPACE (space_key.onDown, in the event of the key, before the
+    ;; frame): the first rabbit of the circle that has not jumped, if it is
+    ;; already there
+    spawn {
+        loop e on :rl.key.dn {
+            if e.name == 'SPACE' {
+                var min, r = (20, nil)
+                loop _, x in rabbits.slots {
+                    if x.s.alive && (x.s.jump == false) && (x.s.pos < min) {
+                        set min, r = (x.s.pos, x.s)
+                    }
+                }
+                if (min != 20) && !r.entering {
+                    eng.play(SND_VOWELS@(eng.rand(5)), 0.3)
+                    val d = (cw / 2) + 90
+                    val jx = (W/2) + (d * math.cos(r.rot - (math.pi / 2)))
+                    val jy = (H/2) + (d * math.sin(r.rot - (math.pi / 2)))
+                    spawn @tweens Jump(r, jx, jy, r.x, r.y)
+                    set r.jump = true
+                }
+            }
+        }
+    }
+
+    ;; the update, in the order of the original; `change` is the flag
+    ;; change_level: a new level once per turn, when the bad one passes the
+    ;; top of the circle
+    var change = true
+    do :play {
+        loop on :update {
+            loop _, b in overlap_list(bbody, :rabbit) {
+                sprite_kill(b.spr)
+                set score -= 1
+                eng.play(SND_HAHO, 0.5)
+            }
+            val a = angle_get(bad)
+            ifs {
+                (a >= -2) && (a <= 2) && change => {
+                    set change = false
+                    if draw_level() == :end {
+                        escape :play
+                    }
+                }
+                a > 2 => set change = true
+            }
+            angle_set(bad, angle_get(bad) + 1.2)
+            val x = (W/2) + (((cw / 2) - 4) * math.cos(bad.rot - (math.pi / 2)))
+            val y = (H/2) + (((cw / 2) - 4) * math.sin(bad.rot - (math.pi / 2)))
+            sprite_reset(bad, bbody, x, y)
+        }
+    }
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/9.js
+func trace () {
+    val f = rl.frame()
+    var r = tostring(f) ++ " " ++ screen ++ " " ++ tostring(score) ++ " " ++
+            tostring(level) ++ " " ++ tostring(best_score)
+    if screen == "Play" {
+        val p = Rab.play
+        var n, sx, sy, sa = (0, 0, 0, 0)
+        loop _, x in p.rabbits.slots {
+            if x.s.alive {
+                set n += 1
+                set sx += x.s.x
+                set sy += x.s.y
+                set sa += x.s.alpha
+            }
+        }
+        set r = r ++ " " ++ eng.fixed(angle_get(p.bad), 2) ++ " " ++ tostring(n) ++ " " ++
+                eng.fixed(sx, 2) ++ " " ++ eng.fixed(sy, 2) ++ " " ++ eng.fixed(sa, 3)
+    }
+    r
+}
+;; [/trace]

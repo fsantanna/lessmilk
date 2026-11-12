@@ -139,9 +139,12 @@ func sprite_update (s) {
     }
 }
 
+;; the alpha of the world (game.world.alpha), which multiplies all
+val World = [ alpha = 1 ]
+
 func sprite_draw (s) {
     if s.visible {
-        eng.draw(s.img, s.frame, s.x, s.y, s.ax, s.ay, (s.rot * 180) / math.pi, s.sx, s.sy, s.alpha)
+        eng.draw(s.img, s.frame, s.x, s.y + (s.oy || 0), s.ax, s.ay, (s.rot * 180) / math.pi, s.sx, s.sy, s.alpha * World.alpha)
     }
 }
 
@@ -161,8 +164,10 @@ func Text (x, y, s, size, align, font) {
     ]
 }
 
+;; a text scaled (t.sx, the same in x and y) is drawn at its size times the
+;; scale: Pixi scales the picture of the text, raylib draws the font larger
 func text_draw (t) {
     if t.visible {
-        eng.text(t.s, t.x + (t.ox || 0), t.y + (t.oy || 0), t.size, t.color, t.ax, t.ay, t.align, t.alpha, t.font)
+        eng.text(t.s, t.x + (t.ox || 0), t.y + (t.oy || 0), t.size * (t.sx || 1), t.color, t.ax, t.ay, t.align, t.alpha * World.alpha, t.font)
     }
 }

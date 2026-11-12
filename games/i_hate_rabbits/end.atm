@@ -1,0 +1,43 @@
+;; End: the rabbits saved, the best score; SPACE starts again, after 500 ms.
+
+val IMG_TWEET = eng.image(A ++ "images/tweet.png")
+val SND_YEAH  = eng.sound(A ++ "sounds/yeah.mp3")
+
+task End () {
+    if score > best_score {
+        set best_score = score
+    }
+    val circle = Sprite(IMG_CIRCLE, W/2, H/2)
+    set circle.ax, circle.ay = (0.5, 0.5)
+    val l1 = Text((W/2) + 0.5, 40, "you saved " ++ tostring(score) ++ " rabbits", 30, 0.5)
+    val l2 = Text((W/2) + 0.5, 70, "best score: " ++ tostring(best_score), 20, 0.5)
+    val l3 = Text((W/2) + 0.5, (H/2) + 0.5, "press space to\nrestart the game", 20, 0.5)
+    val l4 = Text(((W/2) - 70) + 0.5, H - 50, "share your score on Twitter:", 20, 0.5)
+    loop _, t in [l1, l2, l3, l4] {
+        set t.ax, t.ay = (0.5, 0.5)
+    }
+    val tweet = Sprite(IMG_TWEET, (W/2) + 135, H - 50)
+    set tweet.sx, tweet.sy = (0.8, 0.8)
+    set tweet.ax, tweet.ay = (0.5, 0.5)
+    spawn Pulse(tweet, 0.85, 0.8, 300)
+    val time = eng.now() + 500
+    if level == 9 {
+        eng.play(SND_YEAH, 0.5)
+    }
+    set World.alpha = 0
+    spawn Motion(World, [alpha=1], 1000)
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            sprite_draw(circle)
+            text_draw(l1)
+            text_draw(l2)
+            text_draw(l3)
+            text_draw(l4)
+            sprite_draw(tweet)
+        }
+    }
+    ;; space_key.onDown, which starts only after 500 ms
+    await :rl.key.dn until (it.name == 'SPACE') && (time < eng.now())
+    set World.alpha = 1
+}
