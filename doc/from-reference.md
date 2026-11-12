@@ -46,3 +46,22 @@ the indexes, and the units change everywhere.
 - The robot was a task of its own (`robot.atm`), which ended on `:dead`;
   here the player is part of `Play`, whose end is the hit: the original has
   no separate life for the player.
+
+## 3. Box Jump
+
+- The student's version is one file (`main.atm`, 233 lines), with a task per
+  cube, a task per particle (`HitAnimation` and `Particle`), and a block per
+  level that pins its own pool of cubes: `loop j in #levels { pin cubes =
+  tasks(20) ... }`. The level ends when its block ends, which is the most
+  direct form of the lifetime of a level.
+- The port keeps the cubes and the particles as tasks, but changes the level
+  in the middle of the update, as the original does (`loadLevel` when the
+  player passes `w - 60`), since the rest of that update (gravity, the test
+  of the fall) runs in the same frame with the new level: `abort cubes` and
+  new spawns in the same pool.
+- Her jump is `await` of SPACE, a rise and a fall computed from the clock,
+  and `await until player.y >= floor_y`; the original's jump is a velocity
+  and a gravity of the arcade physics, with `collide` against the line and
+  `touching.down`, which the port now has in `lib/physics.atm`.
+- Her particles have their own random speeds; here they are those of the
+  emitter, from `game.rnd`, so that they are the same as the original's.

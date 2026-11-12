@@ -25,8 +25,11 @@ that is checked, and what differs, game by game.
       the canvas can be read back.
 - All twelve games start with the states `Boot` (where present) and `Load`.
   While they run, frames run with the clock stopped at `T0` and are not
-  counted. Frame 1 is the first frame in the next state; no input can be
-  given at frame 1.
+  counted. Frame 1 is the first frame that starts in the next state; no
+  input can be given at frame 1. The assets load asynchronously, so the
+  state can change between two frames: the harness records the state in
+  which each frame starts (`__ranIn`). Counting from the state seen after a
+  frame made Box Jump start one frame off in some runs.
 - A run is a file with `FRAMES`, `SEED`, `INPUT`, and `SHOTS`, in the
   format of the raylib port (`fsantanna/raylib`), so the same file drives
   the original and the port: `INPUT=f:op,...` applies `op` before frame
@@ -91,10 +94,11 @@ does, in its order (read from `ext/phaser/1.1.3/src/core/Game.js`):
 2. `:pre`: `world.update`: each sprite updates its animation and tests if
    it left the world; then each body takes the position of its sprite and
    moves (`physics_pre`);
-3. `:update`: `state.update`;
-4. `:overlap`: the end of `state.update`, where the games test overlaps;
-5. `world.postUpdate`: the sprites follow their bodies (`physics_post`);
-6. the render, whose positions the next preUpdate reads (`physics_draw`).
+3. `:particles`: `particles.update`: the emitters emit;
+4. `:update`: `state.update`;
+5. `:overlap`: the end of `state.update`, where the games test overlaps;
+6. `world.postUpdate`: the sprites follow their bodies (`physics_post`);
+7. the render, whose positions the next preUpdate reads (`physics_draw`).
 
 What Phaser 1.1.3 does there, and the port copies:
 
@@ -133,7 +137,23 @@ What Phaser 1.1.3 does there, and the port copies:
   after it was made.
 - **Speed.** A body moves by `velocity * physicsElapsed`, where
   `physicsElapsed` is the time between two frames, in seconds, from the
-  clock of Phaser (0 in frame 1).
+  clock of Phaser (0 in frame 1). `updateMotion` applies half of the change
+  of velocity before the move and half after; gravity is added to the
+  velocity in each frame, not scaled by the time (12 a frame in Box Jump).
+- **Angles.** A sprite keeps its rotation in radians; `angle` is wrapped to
+  [-180, 180) when set and when read, and `postUpdate` sets it again from
+  the rotation of the body in each frame. The port keeps the rotation, with
+  the same arithmetic (`angle_get`, `angle_set`).
+- **Collide.** `physics.collide` of two sprites is `separateX` or else
+  `separateY` (only one axis per call), with `OVERLAP_BIAS` 4; it sets
+  `touching`, which `preUpdate` clears in each frame.
+- **Particles.** The emitter emits in `particles.update`, after the
+  sprites and bodies of the frame updated: a new particle neither moves
+  nor ages in its first frame. Its speeds and spin come from `game.rnd`,
+  Phaser's own generator (`RandomDataGenerator`), which Phaser seeds when it
+  boots with one draw of `Math.random`, as a string: the port has the
+  generator and `Number.prototype.toString`, checked against the source of
+  Phaser in node.
 
 ## 1. Run!
 
@@ -159,3 +179,27 @@ What is not compared:
   recycled; the port draws them in the order of its pool. It shows only
   where two enemies cross.
 - The sound (no device in the container).
+
+## 3. Box Jump
+
+The same as the original on its two runs, line by line (`tst/box_jump/`):
+
+| Run | Frames | Seed | Input | Reaches |
+|-----|-------:|-----:|-------|---------|
+| `periodic` | 1800 | 1 | SPACE for 3 frames every 40 frames | level 2, 19 deaths |
+| `random` | 3600 | 9 | SPACE at random (Python's generator, seed 3) | level 4, 37 deaths |
+
+Trace: frame, state, level, deaths; in Play, the player (x, y, angle,
+velocity), if it touches down, if it is alive, the cubes alive, and the
+particles that exist.
+
+What is not compared:
+
+- The screen `End`: no run gets through the twenty levels.
+- The angle of a particle that Phaser recycles: `reset` does not reset its
+  rotation, so a recycled particle starts at the angle where it died; in
+  the port each particle starts at 0. It shows only in the screens, for
+  the 300 ms of a burst; the trace does not have particles' angles.
+- A rotation of an earlier jump that is still running when the player
+  starts again: Phaser pauses only the last one, and so does the port, but
+  no run has two jumps 700 ms apart with a death in between.
