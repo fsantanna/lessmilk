@@ -92,7 +92,6 @@ task Play () {
         "1- arrow keys to move\n2- take coins for score\n3- jump on penguins to kill", 18)
     set label_tuto.ax, label_tuto.ay = (0.5, 0.5)
     var score, best = (0, 0)
-    var one_coin, one_kill = (false, false)
     var coin_x = 0
     var half = 1
     var enemy_time = 0
@@ -148,7 +147,7 @@ task Play () {
         if !all {
             eng.play(SND_KILL, 0.15)
             shake(2, 80)
-            set one_kill = true
+            emit @:global :kill
         }
     }
 
@@ -193,6 +192,13 @@ task Play () {
                 set half = 1
             }
         }
+    }
+
+    ;; the tutorial fades once the man took a coin and killed a penguin (the
+    ;; flags oneCoin and oneKill, and the label's alive, of the original)
+    spawn {
+        await <:coin && :kill>
+        spawn @tweens Motion(label_tuto, [alpha=0], 1000)
     }
 
     ;; the update, in the order of the original
@@ -254,7 +260,7 @@ task Play () {
             }
             set coin_x = ra
             sprite_reset(coin, cbody, tab@(ra)@0, tab@(ra)@1)
-            set one_coin = true
+            emit @:global :coin
         }
 
         set pbody.vx = 0
@@ -321,10 +327,6 @@ task Play () {
             player_die()
         }
 
-        if one_coin && one_kill && (label_tuto.alive != false) {
-            set label_tuto.alive = false
-            spawn @tweens Motion(label_tuto, [alpha=0], 1000)
-        }
     }
 }
 
