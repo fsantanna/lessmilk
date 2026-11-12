@@ -54,24 +54,41 @@ val Ease = [
 
 ;; `ctl`, optional, is a table whose field `stop` pauses the tween for good,
 ;; as tween.pause() did: set ctl.stop = true.
-task Motion (obj, to, ms, ease, ctl) {
+;;
+;; `delay`, optional, in ms, is tween.delay(): the tween starts at
+;; now + delay, in its own timeline, as Phaser computes it (not the same as
+;; an `await` before the Motion, which would start it in a later frame).
+;;
+;; A value given as a string, as "-20" or "+30", is relative to the value at
+;; the start, as in Phaser. `ms` is `ms || 1000`, as in Phaser.
+task Motion (obj, to, ms, ease, ctl, delay) {
     val f = ease || Ease.linear
+    val dur = ms || 1000
     val from = []
+    val end = []
     loop k, v in to {
         set from@k = prop_get(obj, k)
+        set end@k = if type(v) == "string" => from@k + tonumber(v) => v
     }
-    val t0 = eng.now()
+    val t0 = eng.now() + (delay || 0)
     await :rl.frame                 ;; added at the end of the next pass
     loop {
         await :clock
         if ctl && ctl.stop {
             await false
         }
-        val t = (eng.now() - t0) / ms
-        val e = if t > 1 => 1 => t
-        val v = f(e)
-        loop k, end in to {
-            prop_set(obj, k, from@k + ((end - from@k) * v))
+        val now = eng.now()
+        val t = (now - t0) / dur
+        val e = ifs {
+            now < t0 => nil             ;; still in its delay
+            t > 1 => 1
+            else => t
+        }
+        if e != nil {
+            val v = f(e)
+            loop k, x in end {
+                prop_set(obj, k, from@k + ((x - from@k) * v))
+            }
         }
         until e == 1
     }
