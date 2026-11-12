@@ -92,3 +92,25 @@ the key of the current letter in each update, and a key that goes down one
 frame after the previous letter fired is not taken (it was still `reset`
 from the letter before, with no frame up in between). An `await` of the
 key press would take it, and the game would not be the same.
+
+## 9. I Hate Rabbits
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `w`, `h`, `map` | constant | `W`, `H`, `MAP` (`level.atm`) |
+| `score`, `level`, `best_score` (globals) | data, shown in Play and End | globals of the port too |
+| `this.change_level` (Play) | control: a new level once per turn of the bad one | `change`, the same flag (see below) |
+| `this.end` (Play) | control: a delayed end, whose code is commented out in the original; always 0 | gone |
+| `this.time` (End) | control: SPACE is ignored for 500 ms | `time`, in the predicate of the `await` of SPACE |
+| `rabbit.t` (each rabbit) | control: the tween of its entry, to know if it is running | `entering`, set by the task `Enter` while its tween runs |
+| `rabbit.jump`, `rabbit.pos` | data of a rabbit | the same fields, on the sprite of its slot |
+| `this.rabbits` (group of 30) | recycled sprites | `Group` |
+| `this.bad`, `this.circle`, labels | drawn | locals of `Play` |
+
+Control: 3 in the JavaScript that work (`change_level`, End's `time`, and
+the tween kept in `rabbit.t`), 1 left (`change`). The level changes when
+the angle of the bad one, which grows by 1.2 in each update, passes the
+top; `change` makes sure it happens once per turn, and stays: the angle is
+read and written in the same update, and a sequence would have to test the
+same numbers. End's `time` is now part of the `await` of the key, and
+`rabbit.t` became the life of the task `Enter`.

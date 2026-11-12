@@ -92,3 +92,17 @@ the indexes, and the units change everywhere.
 - Her letters fly with `Motion.linear` to the bomb; the original's fly with
   a tween of `length * 3` ms, where `length` is the distance to the bottom
   of the screen, which the port keeps.
+
+## 9. I Hate Rabbits
+
+- The student's version (`modular/`, 349 lines) has a task per rabbit,
+  which comes in, jumps, and fades, with `await Motion.linear` of its
+  radius; the levels are `await until (bad.pub.angle >= 360*i)`, which
+  counts the turns of the bad one in an angle that is never wrapped.
+- The original wraps the angle (`sprite.angle` is in [-180, 180)) and
+  changes the level when it is near 0, with the flag `change_level`: the
+  port keeps that test, with the angle wrapped as Phaser wraps it.
+- Her jump awaits SPACE inside the rabbit; here, as in the original, SPACE
+  picks the first rabbit of the circle that has not jumped, in the event of
+  the key, and the rabbit is a slot of a group (what it keeps between lives
+  shows: its rotation, its alpha).

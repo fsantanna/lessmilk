@@ -84,6 +84,16 @@ that is checked, and what differs, game by game.
   the same for 18 sizes from 10 to 80 px). The browser draws a line about
   `0.12 * size` higher than raylib: measured 4 px at 30 px and 2 px at
   20 px in Run!; with the correction, the rows of the text are the same.
+  raylib rounds the advance of each glyph to whole pixels at the size it
+  loads a font: loaded at 20 px, a sentence of 20 px was 10% narrower than
+  in the browser (322 against 358 px). The engine loads each font at about
+  180 px and draws it smaller: 356 against 358, and the rows and columns of
+  the text of Run! are the same as the original's.
+- **The clock between frames.** Phaser sets `game.time.now` when a frame
+  starts. The callbacks of keys (`onDown`) and of the mouse run in the DOM
+  events, between frames, and see the time of the frame before: a tween
+  started there counts from it. `eng.now()` is that clock, set by `Game`
+  when a frame starts.
 
 ## How the port follows a frame of Phaser 1.1.3
 
@@ -269,3 +279,24 @@ What the original does, and the port keeps: while the second letter of
 the first sentence is the next one, each update starts a new tween of the
 alpha of the tutorial (`if (this.level == 1 && this.i == 1)`), so a few of
 them run at once, the last one winning.
+
+## 9. I Hate Rabbits
+
+The same as the original on its two runs, line by line
+(`tst/i_hate_rabbits/`):
+
+| Run | Frames | Seed | Input | Games |
+|-----|-------:|-----:|-------|------:|
+| `play` | 3500 | 3 | SPACE on the menu, then at random (Python's generator, seed 9) | 2 |
+| `fast` | 5700 | 6 | SPACE very often (seed 21), also while the rabbits come in | 3 |
+
+Trace: frame, state, score, level, best score; in Play, the angle of the
+bad one, and the rabbits alive (how many, the sums of x, y, and alpha).
+
+The jumps are callbacks of SPACE (`onDown`), in the event of the key: the
+port awaits `:rl.key.dn`, which comes before the frame, and draws the vowel
+of the jump from `Math.random` there, as the original.
+
+The text that pulses (a tween of the scale of a text) is drawn larger by
+raylib, where Pixi scales the picture of the text: the same size, drawn
+differently.

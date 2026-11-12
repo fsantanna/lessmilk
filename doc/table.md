@@ -3,7 +3,7 @@
 - **Lines** and **tokens**: of code, counted by `tools/count.py` (no blank
   lines, no comments; in Atmos, no trace). JavaScript: all the files of the
   game in `js/` (states, boot, loading). Atmos: `games/<game>/`, without the
-  shared modules of `lib/` (851 lines and 6582 tokens for now), which do
+  shared modules of `lib/` (865 lines and 6672 tokens for now), which do
   what Phaser did.
 - **Control**: the variables of the JavaScript that only control the flow
   (timestamps compared with the clock, flags, states), and how many are left
@@ -18,3 +18,4 @@
 | 2 | Pixel War | 1.1.3 | 198 | 238 | 2188 | 1544 | 5 | 1 | 2 (6000 frames, 9 games) | yes |
 | 3 | Box Jump | 1.1.3 | 185 | 207 | 2746 | 2275 | 3 | 2 | 2 (5400 frames, levels 1 to 4, 56 deaths) | yes |
 | 8 | Save the City | 1.1.3 | 176 | 194 | 1896 | 1558 | 2 | 1 | 2 (2162 frames, 2 cities gone, a restart) | yes |
+| 9 | I Hate Rabbits | 1.1.3 | 252 | 244 | 3161 | 2241 | 3 | 1 | 2 (9200 frames, 5 games) | yes |
