@@ -104,5 +104,4 @@ the indexes, and the units change everywhere.
   port keeps that test, with the angle wrapped as Phaser wraps it.
 - Her jump awaits SPACE inside the rabbit; here, as in the original, SPACE
   picks the first rabbit of the circle that has not jumped, in the event of
-  the key, and the rabbit is a slot of a group (what it keeps between lives
-  shows: its rotation, its alpha).
+  the key, and the rabbit is a slot of a group, as in the original.
