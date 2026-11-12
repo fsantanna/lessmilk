@@ -87,6 +87,7 @@ val Physics = [
     dt = 0,                 ;; game.time.physicsElapsed, in seconds
     gx = 0, gy = 0,         ;; game.physics.gravity
     bodies = [],            ;; the bodies, in the order they were created
+    qt = nil,               ;; the quadtree of the frame
 ]
 
 ;; a 32-bit float, as the transforms of Pixi keep positions
@@ -120,6 +121,8 @@ func Body (spr, group) {
         spr = spr,
         group = group,
         w = spr.img.fw * spr.sx, h = spr.img.fh * spr.sy,
+        sw = spr.img.fw, sh = spr.img.fh,   ;; sourceWidth, sourceHeight
+        ox = 0, oy = 0,                     ;; offset
         x = spr.x, y = spr.y, px = spr.x, py = spr.y,
         rot = 0, prot = 0,              ;; degrees, as body.rotation
         vx = 0, vy = 0,                 ;; velocity
@@ -153,6 +156,12 @@ func body_remove (b) {
     }
 }
 
+;; body.setSize(w, h, ox, oy)
+func body_set_size (b, w, h, ox, oy) {
+    set b.sw, b.sh = (w, h)
+    set b.ox, b.oy = (ox || b.ox, oy || b.oy)
+}
+
 ;; Sprite.reset(x, y): the sprite moves; the body takes the position drawn
 func body_reset (b, x, y) {
     set b.spr.x = x
@@ -160,8 +169,8 @@ func body_reset (b, x, y) {
     set b.vx, b.vy = (0, 0)
     set b.accx, b.accy = (0, 0)
     set b.av, b.aacc = (0, 0)
-    set b.px = b.spr.dx - (b.spr.ax * b.w)
-    set b.py = b.spr.dy - (b.spr.ay * b.h)
+    set b.px = (b.spr.dx - (b.spr.ax * b.w)) + b.ox
+    set b.py = (b.spr.dy - (b.spr.ay * b.h)) + b.oy
     set b.x = b.px
     set b.y = b.py
     set b.rot = angle_get(b.spr)
@@ -215,59 +224,185 @@ func update_motion (b) {
     set b.vy += d
 }
 
-;; Body.preUpdate, for all bodies
+;; Sprite.preUpdate and Body.preUpdate, for all bodies, in order; then the
+;; quadtree of the frame, with the bodies that may collide
 func physics_pre () {
+    qt_clear()
     loop _, b in Physics.bodies {
         val s = b.spr
-        ;; Sprite.updateBounds -> Body.updateBounds: the size of the body
-        val scx, scy = drawn_scale(s)
-        set b.w = s.img.fw * scx
-        set b.h = s.img.fh * scy
-        set b.touching.up, b.touching.down = (false, false)
-        set b.touching.left, b.touching.right = (false, false)
-        set b.px = s.dx - (s.ax * b.w)
-        set b.py = s.dy - (s.ay * b.h)
-        set b.x = b.px
-        set b.y = b.py
-        set b.prot = angle_get(s)
-        set b.rot = b.prot
-        if b.moves {
-            update_motion(b)
-            if b.world {
-                ifs {
-                    b.x < 0 => { set b.x = 0 ; set b.vx *= -b.bx }
-                    (b.x + b.w) > Physics.w => { set b.x = Physics.w - b.w ; set b.vx *= -b.bx }
-                }
-                ifs {
-                    b.y < 0 => { set b.y = 0 ; set b.vy *= -b.by }
-                    (b.y + b.h) > Physics.h => { set b.y = Physics.h - b.h ; set b.vy *= -b.by }
-                }
+        if (s.exists != false) && s.oob_kill {
+            ;; Sprite.updateBounds: outOfBoundsKill, from the bounds drawn,
+            ;; when the sprite was in the world and is not anymore
+            val now_in = in_world(s)
+            val was_in = s.in_world != false
+            set s.in_world = now_in
+            if was_in && !now_in {
+                sprite_kill(s)
             }
         }
-        set b.live = !b.none && (s.visible != false) && (s.alive != false)
+        if s.exists != false {
+            ;; Body.updateBounds: the size of the body, from the scale drawn
+            val scx, scy = drawn_scale(s)
+            set b.w = b.sw * scx
+            set b.h = b.sh * scy
+            set b.touching.up, b.touching.down = (false, false)
+            set b.touching.left, b.touching.right = (false, false)
+            set b.px = (s.dx - (s.ax * b.w)) + b.ox
+            set b.py = (s.dy - (s.ay * b.h)) + b.oy
+            set b.x = b.px
+            set b.y = b.py
+            set b.prot = angle_get(s)
+            set b.rot = b.prot
+            if b.moves {
+                update_motion(b)
+                if b.world {
+                    ifs {
+                        b.x < 0 => { set b.x = 0 ; set b.vx *= -b.bx }
+                        (b.x + b.w) > Physics.w => { set b.x = Physics.w - b.w ; set b.vx *= -b.bx }
+                    }
+                    ifs {
+                        b.y < 0 => { set b.y = 0 ; set b.vy *= -b.by }
+                        (b.y + b.h) > Physics.h => { set b.y = Physics.h - b.h ; set b.vy *= -b.by }
+                    }
+                }
+            }
+            set b.live = !b.none && (s.visible != false) && (s.alive != false)
+            if b.live {
+                qt_insert(Physics.qt, b)
+            }
+        } else {
+            set b.live = false
+        }
     }
 }
 
-;; Body.postUpdate, for all bodies
+;; Body.postUpdate, for all bodies of sprites that exist
 func physics_post () {
     loop _, b in Physics.bodies {
-        val dx = b.x - b.px
-        val dy = b.y - b.py
-        if (dx != 0) || (dy != 0) {
-            set b.spr.x += dx
-            set b.spr.y += dy
-        }
-        if b.allow_rotation {
-            angle_set(b.spr, angle_get(b.spr) + (b.rot - b.prot))
+        if b.spr.exists != false {
+            val dx = b.x - b.px
+            val dy = b.y - b.py
+            if (dx != 0) || (dy != 0) {
+                set b.spr.x += dx
+                set b.spr.y += dy
+            }
+            if b.allow_rotation {
+                angle_set(b.spr, angle_get(b.spr) + (b.rot - b.prot))
+            }
         }
     }
 }
 
-;; The render: the transforms drawn, which the next preUpdate reads
+;; The render: the transforms drawn, which the next preUpdate reads; Pixi
+;; does not update the transform of what is not visible
 func physics_draw () {
     loop _, b in Physics.bodies {
-        sprite_drawn(b.spr)
+        if b.spr.visible != false {
+            sprite_drawn(b.spr)
+        }
     }
+}
+
+;; Sprite.reset(x, y) of a sprite with a body: it lives again
+func sprite_reset (s, b, x, y) {
+    set s.alive, s.exists, s.visible = (true, true, true)
+    body_reset(b, x, y)
+}
+
+;; Sprite.kill
+func sprite_kill (s) {
+    set s.alive, s.exists, s.visible = (false, false, false)
+}
+
+;; Phaser.QuadTree of 1.1.3 (math/QuadTree.js): the world, 10 objects per
+;; node, 4 levels; its order is the order in which overlaps are found
+func qt_node (x, y, w, h, level) {
+    val rx, ry = (math.floor(x + 0.5), math.floor(y + 0.5))
+    :QuadTree [
+        x = rx, y = ry, w = w, h = h,
+        right = rx + math.floor(w / 2),
+        bottom = ry + math.floor(h / 2),
+        sw = math.floor(w / 2), sh = math.floor(h / 2),
+        level = level || 0,
+        objects = [],
+        nodes = nil,
+    ]
+}
+
+func qt_clear () {
+    set Physics.qt = qt_node(0, 0, Physics.w, Physics.h, 0)
+}
+
+func qt_index (q, r) {
+    val rr, rb = (r.x + r.w, r.y + r.h)
+    ifs {
+        (r.x < q.right) && (rr < q.right) => ifs {
+            (r.y < q.bottom) && (rb < q.bottom) => 1
+            r.y > q.bottom => 2
+            else => -1
+        }
+        r.x > q.right => ifs {
+            (r.y < q.bottom) && (rb < q.bottom) => 0
+            r.y > q.bottom => 3
+            else => -1
+        }
+        else => -1
+    }
+}
+
+;; split: the level of the node goes up first, as in 1.1.3
+func qt_split (q) {
+    set q.level += 1
+    set q.nodes = [
+        qt_node(q.right, q.y, q.sw, q.sh, q.level),
+        qt_node(q.x, q.y, q.sw, q.sh, q.level),
+        qt_node(q.x, q.bottom, q.sw, q.sh, q.level),
+        qt_node(q.right, q.bottom, q.sw, q.sh, q.level),
+    ]
+}
+
+func qt_insert (q, b) {
+    if q.nodes {
+        val i = qt_index(q, b)
+        if i != -1 {
+            qt_insert(q.nodes@(i), b)
+            return nil
+        }
+    }
+    set q.objects@+ = b
+    if (#q.objects > 10) && (q.level < 4) {
+        if !q.nodes {
+            qt_split(q)
+        }
+        var i = 0
+        loop {
+            while i < #q.objects
+            val j = qt_index(q, q.objects@(i))
+            if j != -1 {
+                qt_insert(q.nodes@(j), vector.remove(q.objects, i))
+            } else {
+                set i += 1
+            }
+        }
+    }
+    nil
+}
+
+func qt_retrieve (q, b, out) {
+    loop _, o in q.objects {
+        set out@+ = o
+    }
+    if q.nodes {
+        val i = qt_index(q, b)
+        if i != -1 {
+            qt_retrieve(q.nodes@(i), b, out)
+        } else {
+            loop k in 4 {
+                qt_retrieve(q.nodes@(k), b, out)
+            }
+        }
+    }
+    out
 }
 
 ;; Rectangle.intersects of two bodies
@@ -275,15 +410,23 @@ func overlap (a, b) {
     (a.x < (b.x + b.w)) && (b.x < (a.x + a.w)) && (a.y < (b.y + b.h)) && (b.y < (a.y + a.h))
 }
 
-;; physics.overlap(a, group): the first live body of the group (a tag)
-;; that a overlaps, or nil; a itself need not be live (in the quadtree)
-func overlap_any (a, group) {
-    loop _, b in Physics.bodies {
-        if (b.group == group) && b.live && (b != a) && overlap(a, b) {
-            return b
+;; physics.overlap(a, group) (overlapSpriteVsGroup): the bodies of the group
+;; (a tag) in the quadtree of this frame that a overlaps, in the order of the
+;; quadtree; a itself need not be in it
+func overlap_list (a, group) {
+    val out = []
+    loop _, b in qt_retrieve(Physics.qt, a, []) {
+        if (b.group == group) && (b != a) && overlap(a, b) {
+            set out@+ = b
         }
     }
-    nil
+    out
+}
+
+;; the first of them, or nil
+func overlap_any (a, group) {
+    val l = overlap_list(a, group)
+    if #l > 0 => l@0 => nil
 }
 
 ;; ArcadePhysics.separateX and separateY (axis :x or :y), OVERLAP_BIAS 4
