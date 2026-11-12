@@ -2,7 +2,7 @@
 ;; env/raylib.atm, so that a port does in each frame what its original did,
 ;; in the same order:
 ;;
-;;      time event      tweens.update: the tasks of Motion move
+;;      (tweens_pass)   tweens.update: the tweens of Motion move
 ;;      :pre            world.update: each sprite updates its animation and
 ;;                      tests if it left the world; then the bodies move
 ;;                      (physics_pre)
@@ -68,6 +68,7 @@ task Game (w, h) {
         set Physics.elapsed = now - prev
         set Physics.dt = Physics.elapsed / 1000
         set prev = now
+        tweens_pass()
         emit @:global :pre
         physics_pre()
         emit @:global :particles

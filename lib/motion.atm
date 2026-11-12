@@ -11,13 +11,18 @@
 ;;
 ;;      v = start + (end - start) * ease(min(1, (now - start_time) / ms))
 ;;
-;; It moves on the time events, which come before :rl.frame in a frame, as
-;; Phaser updates its tweens before the update of the state. TweenManager
-;; adds a new tween at the end of its pass over the tweens: a tween started
-;; in a create (before frame 1) first moves in frame 2; in an update (frame
-;; k), in frame k+2; in the pass itself (by an `onComplete`, or here after
-;; the `await` of another Motion, in frame k), in frame k+1. That is: from
-;; the first time event after the next :rl.frame. The task ends in the frame in which it
+;; The tweens are updated as Phaser 1.1.3 updates them (TweenManager): in a
+;; list, in order, once per frame, before the sprites (`tweens_pass`, which
+;; lib/game.atm calls first in each frame). A new tween goes to a list that
+;; is added at the end of the pass: a tween started in a create (before frame
+;; 1) first moves in frame 2; in an update (frame k), in frame k+2; in the
+;; pass itself (by an `onComplete`, or here after the `await` of another
+;; Motion, in frame k), in frame k+1. Two tweens on the same field: the later
+;; in the list wins, and a tween that follows another goes to the end.
+;;
+;; The task Motion ends when its tween ends, inside the pass, as onComplete
+;; was called there. If the task is aborted, its tween is deleted (Phaser
+;; would go on moving the object). The task ends in the frame in which it
 ;; reaches the end: `await` goes on there, as an `onComplete` did.
 ;;
 ;; What Phaser chained by callbacks (`onComplete`, `.to().to()`, `.loop()`,
@@ -28,6 +33,9 @@
 ;;          await Motion(label, [angle=1], 500)
 ;;          await Motion(label, [angle=-1], 500)
 ;;      }
+
+;; the list of tweens, and the tweens added in this pass
+val Tweens = [ list = [], add = [] ]
 
 ;; The easings that the originals use. The same formulas are in reasings.h of
 ;; raylib, but in 32-bit floats: here they are in doubles, as in JavaScript,
@@ -62,34 +70,62 @@ val Ease = [
 ;; A value given as a string, as "-20" or "+30", is relative to the value at
 ;; the start, as in Phaser. `ms` is `ms || 1000`, as in Phaser.
 task Motion (obj, to, ms, ease, ctl, delay) {
-    val f = ease || Ease.linear
-    val dur = ms || 1000
-    val from = []
-    val end = []
+    val r = :Tween [
+        obj = obj, f = ease || Ease.linear, dur = ms || 1000, ctl = ctl,
+        from = [], end = [],
+        t0 = eng.now() + (delay || 0),
+        dead = false,
+    ]
     loop k, v in to {
-        set from@k = prop_get(obj, k)
-        set end@k = if type(v) == "string" => from@k + tonumber(v) => v
+        set r.from@k = prop_get(obj, k)
+        set r.end@k = if type(v) == "string" => r.from@k + tonumber(v) => v
     }
-    val t0 = eng.now() + (delay || 0)
-    await :rl.frame                 ;; added at the end of the next pass
-    loop {
-        await :clock
-        if ctl && ctl.stop {
-            await false
-        }
-        val now = eng.now()
-        val t = (now - t0) / dur
-        val e = ifs {
-            now < t0 => nil             ;; still in its delay
-            t > 1 => 1
-            else => t
-        }
-        if e != nil {
-            val v = f(e)
-            loop k, x in end {
-                prop_set(obj, k, from@k + ((x - from@k) * v))
+    defer {
+        set r.dead = true                   ;; pendingDelete
+    }
+    set Tweens.add@+ = r                    ;; TweenManager.add
+    await :tween.done until it.r == r
+}
+
+;; Tween.update: false when the tween is over (or deleted)
+func tween_update (r, now) {
+    ifs {
+        r.dead => false
+        (r.ctl && r.ctl.stop) || (now < r.t0) => true      ;; paused, or in its delay
+        else => {
+            val t = (now - r.t0) / r.dur
+            val e = if t > 1 => 1 => t
+            val v = r.f(e)
+            loop k, x in r.end {
+                prop_set(r.obj, k, r.from@k + ((x - r.from@k) * v))
+            }
+            if e == 1 {
+                set r.dead = true
+                emit @:global :tween.done [r=r]     ;; onComplete
+                false
+            } else {
+                true
             }
         }
-        until e == 1
     }
+}
+
+;; TweenManager.update: the tweens in order, then the new ones at the end
+func tweens_pass () {
+    val now = eng.now()
+    var i = 0
+    var n = #Tweens.list
+    loop {
+        while i < n
+        if tween_update(Tweens.list@i, now) {
+            set i += 1
+        } else {
+            vector.remove(Tweens.list, i)
+            set n -= 1
+        }
+    }
+    loop _, r in Tweens.add {
+        set Tweens.list@+ = r
+    }
+    set Tweens.add = []
 }
