@@ -52,7 +52,9 @@ val Ease = [
     },
 ]
 
-task Motion (obj, to, ms, ease) {
+;; `ctl`, optional, is a table whose field `stop` pauses the tween for good,
+;; as tween.pause() did: set ctl.stop = true.
+task Motion (obj, to, ms, ease, ctl) {
     val f = ease || Ease.linear
     val from = []
     loop k, v in to {
@@ -62,6 +64,9 @@ task Motion (obj, to, ms, ease) {
     await :rl.frame                 ;; added at the end of the next pass
     loop {
         await :clock
+        if ctl && ctl.stop {
+            await false
+        }
         val t = (eng.now() - t0) / ms
         val e = if t > 1 => 1 => t
         val v = f(e)

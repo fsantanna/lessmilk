@@ -89,12 +89,13 @@ ${tags.join('\n')}
     await pg.addInitScript(p => { window.__params = p; }, { seed: run.seed });
     await pg.goto('file://' + page);
 
-    // loading: frames with the clock stopped at T0, until a frame runs in
-    // a state after Boot and Load; that frame is frame 1
+    // loading: frames with the clock stopped at T0, until a frame starts in
+    // a state after Boot and Load; that frame is frame 1. The state is the
+    // one in which the frame started: the assets load asynchronously, and
+    // the state may change between two frames.
     const ready = () => pg.evaluate(() => {
-        const g = window.Phaser && Phaser.GAMES && Phaser.GAMES[0];
-        if (!g || !g.isBooted || !g.state.current) return false;
-        return !/^(Boot|Load)$/.test(g.state.current) && !g.load.isLoading;
+        const st = window.__ranIn;
+        return !!st && !/^(Boot|Load)$/.test(st);
     });
     let waited = 0;
     while (true) {

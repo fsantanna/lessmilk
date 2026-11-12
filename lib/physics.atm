@@ -83,6 +83,7 @@ static void phs_bounds (double x, double y, double rot, double sx, double sy,
 
 val Physics = [
     w = 0, h = 0,           ;; the world: (0, 0, w, h)
+    elapsed = 0,            ;; game.time.elapsed, in ms
     dt = 0,                 ;; game.time.physicsElapsed, in seconds
     gx = 0, gy = 0,         ;; game.physics.gravity
     bodies = [],            ;; the bodies, in the order they were created
@@ -275,13 +276,11 @@ func overlap (a, b) {
 }
 
 ;; physics.overlap(a, group): the first live body of the group (a tag)
-;; that a overlaps, or nil
+;; that a overlaps, or nil; a itself need not be live (in the quadtree)
 func overlap_any (a, group) {
-    if a.live {
-        loop _, b in Physics.bodies {
-            if (b.group == group) && b.live && (b != a) && overlap(a, b) {
-                return b
-            }
+    loop _, b in Physics.bodies {
+        if (b.group == group) && b.live && (b != a) && overlap(a, b) {
+            return b
         }
     }
     nil

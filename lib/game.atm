@@ -6,6 +6,7 @@
 ;;      :pre            world.update: each sprite updates its animation and
 ;;                      tests if it left the world; then the bodies move
 ;;                      (physics_pre)
+;;      :particles      particles.update: the emitters emit
 ;;      :update         state.update: the game
 ;;      :overlap        the end of state.update, where the games call
 ;;                      physics.overlap and physics.collide
@@ -20,6 +21,7 @@ include "engine.atm"
 include "motion.atm"
 include "sprite.atm"
 include "physics.atm"
+include "particles.atm"
 
 ;; Phaser 1.1.3, when it boots, seeds game.rnd with one draw of Math.random:
 ;; new Phaser.RandomDataGenerator([(Date.now() * Math.random()).toString()]),
@@ -63,10 +65,12 @@ task Game (w, h) {
     loop on :rl.frame {
         set Keys.frame += 1
         val now = eng.now()
-        set Physics.dt = (now - prev) / 1000
+        set Physics.elapsed = now - prev
+        set Physics.dt = Physics.elapsed / 1000
         set prev = now
         emit @:global :pre
         physics_pre()
+        emit @:global :particles
         emit @:global :update
         emit @:global :overlap
         physics_post()

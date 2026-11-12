@@ -1,0 +1,114 @@
+;; Particles: the emitter of Phaser 1.1.3 (Phaser.Particles.Arcade.Emitter),
+;; read from its source. A particle is a task with a sprite and a body, which
+;; lives for `lifespan` ms: the life of the task is the life of the particle,
+;; where Phaser recycles 200 dead sprites.
+;;
+;;      val em = Emitter(img, 200)          ;; game.add.emitter + makeParticles
+;;      set em.gravity = 0
+;;      set em.min_vx, em.max_vx = (-200, 200)
+;;      spawn Emitter_run(em)               ;; its update, in world.update
+;;      emitter_start(em, true, 300, nil, 8)
+;;      loop _, s in em.sprites { ... }      ;; the sprites alive
+;;
+;; As in Phaser, `start` only arms the emitter: it emits in the next
+;; particles.update (:particles), after the sprites and bodies of that frame
+;; updated, so a new particle first moves and ages in the next frame. Speeds
+;; and rotations are drawn from game.rnd.
+
+func Emitter (img, max) {
+    :Emitter [
+        img = img, max = max,
+        x = 0, y = 0,                       ;; emitX, emitY
+        min_vx = -100, max_vx = 100,        ;; minParticleSpeed, maxParticleSpeed
+        min_vy = -100, max_vy = 100,
+        min_rot = -360, max_rot = 360,      ;; minRotation, maxRotation
+        gravity = 2,
+        on = false, explode = true,
+        lifespan = 0, frequency = 250, quantity = 0,
+        counter = 0, timer = 0,
+        sprites = [],                       ;; the sprites alive, in order
+    ]
+}
+
+;; emitter.start(explode, lifespan, frequency, quantity)
+func emitter_start (e, explode, lifespan, frequency, quantity) {
+    val ex = if explode == nil => true => explode
+    set e.on = true
+    set e.explode = ex
+    set e.lifespan = lifespan || 0
+    set e.frequency = frequency || 250
+    if ex {
+        set e.quantity = quantity || 0
+    } else {
+        set e.quantity += quantity || 0
+    }
+    set e.counter = 0
+    set e.timer = eng.now() + e.frequency
+}
+
+;; a particle: Emitter.emitParticle, then Sprite.preUpdate until its
+;; lifespan is over
+task Particle (e) {
+    val s = Sprite(e.img, e.x, e.y)
+    set s.ax, s.ay = (0.5, 0.5)
+    set pub = s
+    set e.sprites@+ = s
+    val b = Body(s, :particle)
+    set b.none = true                       ;; allowCollision.none
+    defer {
+        body_remove(b)
+        loop i, v in e.sprites {
+            if v == s {
+                vector.remove(e.sprites, i)
+                break
+            }
+        }
+    }
+    body_reset(b, e.x, e.y)
+    set s.lifespan = e.lifespan
+    set b.vx = if e.min_vx != e.max_vx => eng.rnd_integer_in_range(e.min_vx, e.max_vx) => e.min_vx
+    set b.vy = if e.min_vy != e.max_vy => eng.rnd_integer_in_range(e.min_vy, e.max_vy) => e.min_vy
+    set b.gy = e.gravity
+    set b.av = if e.min_rot != e.max_rot => eng.rnd_integer_in_range(e.min_rot, e.max_rot) => e.min_rot
+    ;; Sprite.preUpdate: it ages, and dies when its lifespan is over
+    loop on :pre {
+        if s.lifespan > 0 {
+            set s.lifespan -= Physics.elapsed
+            until s.lifespan <= 0
+        }
+    }
+}
+
+;; Emitter.update, in particles.update
+task Emitter_run (e) {
+    pin ps = tasks(e.max)
+    loop on :particles {
+        if e.on {
+            if e.explode {
+                set e.counter = 0
+                loop {
+                    spawn @ps Particle(e)
+                    set e.counter += 1
+                    while e.counter < e.quantity
+                }
+                set e.on = false
+            } else {
+                if eng.now() >= e.timer {
+                    spawn @ps Particle(e)
+                    set e.counter += 1
+                    if (e.quantity > 0) && (e.counter >= e.quantity) {
+                        set e.on = false
+                    }
+                    set e.timer = eng.now() + e.frequency
+                }
+            }
+        }
+    }
+}
+
+;; the particles, drawn
+func emitter_draw (e) {
+    loop _, s in e.sprites {
+        sprite_draw(s)
+    }
+}

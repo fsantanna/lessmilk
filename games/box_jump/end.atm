@@ -1,0 +1,13 @@
+;; End: the deaths, until the window closes.
+
+task End () {
+    val l1 = Text(W/2, (H/2) - 20, "you finished the game! :-D", 30)
+    val l2 = Text(W/2, (H/2) + 20, "and died " ++ tostring(death) ++ " times\ncan you do better?", 20)
+    set l1.ax, l1.ay = (0.5, 0.5)
+    set l2.ax, l2.ay = (0.5, 0.5)
+    loop on :rl.draw {
+        rl.clear(BG)
+        text_draw(l1)
+        text_draw(l2)
+    }
+}

@@ -44,6 +44,10 @@
             window.__frame++;
             now = T0 + (window.__frame - 1) * STEP;
         }
+        // the state in which this frame starts (before the async loading of
+        // the assets may change it between two frames)
+        var g = window.Phaser && Phaser.GAMES && Phaser.GAMES[0];
+        window.__ranIn = (g && g.isBooted && g.state) ? g.state.current : null;
         var q = queue; queue = [];
         for (var i = 0; i < q.length; i++) q[i](now);
     };

@@ -1,0 +1,220 @@
+;; Play: the twenty levels. The player waits on the line until the first
+;; jump; then it runs, and jumps with SPACE when it touches the line. A cube
+;; that touches it is a death: particles, and the start of the level again.
+;; At the right end, the next level; after the last one, Play ends.
+
+val IMG_PLAYER = eng.image(A ++ "images/player.png")
+val IMG_LINE   = eng.image(A ++ "images/line.png")
+val IMG_CUBE   = eng.image(A ++ "images/cube.png")
+val IMG_PIXEL  = eng.image(A ++ "images/pixel.png")
+val SND_HIT    = eng.sound(A ++ "sounds/hit.wav")
+val SND_JUMP   = eng.sound(A ++ "sounds/jump.wav")
+val SND_MUSIC  = eng.sound(A ++ "sounds/music.wav")
+
+;; the heights of the kinds of cubes, and if they stand on the line
+val CUBES = [
+    @1 = [ h=0.3, air=false ],
+    @2 = [ h=1,   air=false ],
+    @3 = [ h=1.5, air=false ],
+    @4 = [ h=1.8, air=false ],
+    @5 = [ h=0.5, air=true  ],
+]
+
+;; a cube: it grows from the line to its height, until the level ends
+task Cube (x, kind) {
+    val c = CUBES@(kind)
+    val s = Sprite(IMG_CUBE, x, if c.air => ((H * 2) / 3) - 22 => (H * 2) / 3)
+    set s.ax, s.ay = (0, 1)
+    set s.sy = 0
+    set pub = s
+    val b = Body(s, :cube)
+    defer {
+        body_remove(b)
+    }
+    await Motion(s, [sy=c.h], 300 * c.h)
+    await false
+}
+
+task Play () {
+    val keys = Cursor()
+
+    val player = Sprite(IMG_PLAYER, 80, ((H * 2) / 3) - 20)
+    set player.ax, player.ay = (0.5, 0.5)
+    set player.alive = true
+    val body = Body(player, :player)
+    defer {
+        body_remove(body)
+    }
+
+    pin cubes = tasks(20)
+
+    val line = Sprite(IMG_LINE, W/2, math.floor((H * 2) / 3))
+    set line.ax, line.ay = (0.5, 0.5)
+    val lbody = Body(line, :line)
+    set lbody.immovable = true
+    defer {
+        body_remove(lbody)
+    }
+
+    val label_death = Text(100, H - 35, "0", 18, 0.5)
+    val label_level = Text((W - 100) + 0.5, H - 35, "1/" ++ tostring(#MAP), 18, 0.5)
+    val label_tuto  = Text(math.floor(W/2) + 0.5, (H - 35) + 0.5, "press space to jump", 18, 0.5)
+    loop _, l in [label_death, label_level, label_tuto] {
+        set l.ax, l.ay = (0.5, 0.5)
+    }
+
+    val emitter = Emitter(IMG_PIXEL, 200)
+    set emitter.gravity = 0
+    set emitter.min_vx, emitter.min_vy = (-200, -200)
+    set emitter.max_vx, emitter.max_vy = (200, 200)
+    spawn Emitter_run(emitter)
+
+    ;; the rotations of the jumps: the last one is paused when the player
+    ;; starts again; an earlier one, if still running, is not
+    pin rotations = tasks()
+    var rotation = nil
+
+    val func jump () {
+        set body.vy = -250
+        eng.play(SND_JUMP, 0.1)
+        val ctl = [ stop=false ]
+        set rotation = ctl
+        spawn @rotations Motion(player, [angle=angle_get(player) + 180], 700, nil, ctl)
+    }
+
+    ;; initPlayer
+    val func init_player () {
+        set body.gy = 0
+        set player.x = 60
+        set player.y = (((H * 2) / 3) - ((player.img.fh * player.sy) / 2)) - 30
+        set body.vx, body.vy = (0, 0)
+        angle_set(player, 0)
+        if rotation {
+            set rotation.stop = true            ;; this.rotation.pause()
+        }
+    }
+
+    ;; loadLevel: the cubes of the next level, or :end after the last
+    val func load_level () {
+        if #MAP == Box.level {
+            return :end
+        }
+        abort cubes
+        loop i, k in MAP@(Box.level) {
+            if k != 0 {
+                spawn @cubes Cube(100 + (i * IMG_CUBE.fw), k)
+            }
+        }
+        set Box.level += 1
+        set label_level.s = tostring(Box.level) ++ "/" ++ tostring(#MAP)
+        init_player()
+        if Box.level == 2 {
+            set label_tuto.s = ""
+        }
+        nil
+    }
+
+    ;; [trace]
+    set Box.player, Box.body, Box.emitter = (player, body, emitter)
+    ;; [/trace]
+
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            sprite_draw(player)
+            loop _, c in cubes {
+                sprite_draw(c.pub)
+            }
+            sprite_draw(line)
+            text_draw(label_death)
+            text_draw(label_level)
+            text_draw(label_tuto)
+            emitter_draw(emitter)
+        }
+    }
+
+    ;; the hits, while the player is alive: it dies until it lands again
+    spawn {
+        loop {
+            await :overlap until player.alive && overlap_any(body, :cube)
+            set player.alive = false
+            set emitter.x = player.x + ((player.img.fw * player.sx) / 2)
+            set emitter.y = player.y + ((player.img.fh * player.sy) / 2)
+            emitter_start(emitter, true, 300, nil, 8)
+            eng.play(SND_HIT, 0.2)
+            set death += 1
+            set label_death.s = tostring(death)
+            init_player()
+        }
+    }
+
+    set Box.level = 0
+    load_level()
+
+    ;; the rest of the update of the original, after the jump; :end after
+    ;; the last level
+    val func rest (running) {
+        if running && body.touching.down {
+            set player.alive = true
+            set body.vx = 170
+        }
+        val r = if player.x >= (W - 60) => load_level() => nil
+        loop _, p in emitter.sprites {
+            set p.alpha = math.max(0, math.min(1, p.lifespan / 100))
+        }
+        set body.gy = 12
+        if player.y > line.y {
+            init_player()
+        }
+        r
+    }
+
+    ;; the update, in the order of the original: before the first jump, and
+    ;; after it, which starts the run (the flag `start`)
+    do :play {
+        loop on :update {
+            collide(body, lbody)
+            val jumped = cursor_down(keys, 'SPACE') && body.touching.down
+            if jumped {
+                jump()
+                set body.vx = 170
+                eng.play(SND_MUSIC, 0.1)
+            }
+            if rest(jumped) == :end {
+                escape :play
+            }
+            until jumped
+        }
+        loop on :update {
+            collide(body, lbody)
+            if cursor_down(keys, 'SPACE') && body.touching.down {
+                jump()
+            }
+            if rest(true) == :end {
+                escape :play
+            }
+        }
+    }
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/3.js
+func trace () {
+    val f = rl.frame()
+    if screen == "Play" {
+        val p, b = (Box.player, Box.body)
+        var nc, np = (0, 0)
+        loop _, x in Physics.bodies {
+            if (x.group == :cube) && (x.spr.alive != false) { set nc += 1 }
+        }
+        set np = #Box.emitter.sprites
+        tostring(f) ++ " Play " ++ tostring(Box.level) ++ " " ++ tostring(death) ++ " " ++
+            eng.fixed(p.x, 2) ++ " " ++ eng.fixed(p.y, 2) ++ " " ++ eng.fixed(angle_get(p), 2) ++ " " ++
+            eng.fixed(b.vx, 2) ++ " " ++ eng.fixed(b.vy, 2) ++ " " ++
+            (if b.touching.down => "1" => "0") ++ " " ++ (if p.alive => "1" => "0") ++ " " ++
+            tostring(nc) ++ " " ++ tostring(np)
+    } else {
+        tostring(f) ++ " " ++ screen ++ " " ++ tostring(death)
+    }
+}
+;; [/trace]
