@@ -45,3 +45,24 @@ Control: 4 in the JavaScript (`enemyTime`, `scoreTime`, `firstKey`, and
 Control: 3 in the JavaScript (`start`, `rotation`, `alive`), 2 left in the
 port (`rotation`, now a control table rather than a tween, and `alive`, which
 the physics reads).
+
+## 8. Save the City
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `w`, `h`, `sentences` | constant | `W`, `H`, `SENTENCES` |
+| `this.i` (Play) | data: the next letter to type | `Save.i` |
+| `this.level` (Play) | data: the next sentence | `Save.level` |
+| `this.score` (Play) | data | `Save.score` |
+| `this.dead` (Play) | control: `update` returns at once after the end | the loop of the update ends (`until bomb.y > H - 115`), and the end follows it as a sequence |
+| `this.keyReset` (Play) | control: a key fires one letter, and must be up before it fires another | `reset`, the same flag: an edge detector on a level, on a key that changes with `i` (see below) |
+| `this.text`, `this.group_text` | drawn | a task per letter, in a pool: it appears, waits for its `:fire`, flies, and dies when it reaches the bomb |
+| `this.s` | data: the current sentence | `s` |
+| `this.city`, `this.bomb`, `this.tuto` | drawn | locals of `Play` |
+| `exp`, `grp`, `dead`, `restart` (locals of `end` and `annimation_ended`) | drawn | locals of `Play`, after the loop |
+
+Control: 2 in the JavaScript, 1 left. `keyReset` stays: the original tests
+the key of the current letter in each update, and a key that goes down one
+frame after the previous letter fired is not taken (it was still `reset`
+from the letter before, with no frame up in between). An `await` of the
+key press would take it, and the game would not be the same.

@@ -180,6 +180,18 @@ What is not compared:
   where two enemies cross.
 - The sound (no device in the container).
 
+- **Tweens: delays, relative values, chains.** `delay` places the start of
+  a tween in its own timeline (`startTime = now + delay`): `Motion` takes it
+  as an argument, since an `await` before it would start the tween in a
+  later frame. A value given as a string (`"-20"`) is relative to the value
+  at the start. A chain (`.to().to()`) starts the next tween in the pass of
+  the tweens, so it first moves in the next frame: an `await Motion` after
+  another does the same.
+- **Buttons.** A button calls its callback when the mouse is released over
+  it, in the DOM event, before the next frame: the state it starts runs its
+  first update in that frame. The port awaits `:rl.mouse.up`, which comes
+  before `:rl.frame` in the frame of the input.
+
 ## 3. Box Jump
 
 The same as the original on its two runs, line by line (`tst/box_jump/`):
@@ -203,3 +215,25 @@ What is not compared:
 - A rotation of an earlier jump that is still running when the player
   starts again: Phaser pauses only the last one, and so does the port, but
   no run has two jumps 700 ms apart with a death in between.
+
+## 8. Save the City
+
+The same as the original on its two runs, line by line
+(`tst/save_the_city/`):
+
+| Run | Frames | Seed | Input | Reaches |
+|-----|-------:|-----:|-------|---------|
+| `type` | 982 | 1 | two sentences and a part of the third, a letter every 4 frames; the click on the button; a part of the first sentence again | the city gone, a restart |
+| `fast` | 1180 | 2 | four sentences typed at random (Python's generator, seed 5): keys a frame apart, wrong keys | the city gone |
+
+Trace: frame, state, the sentence, the letter, the score, the bomb (y,
+velocity), if the city is gone, the letters alive, the alpha of the
+tutorial, and the frame of the city.
+
+The text is drawn in Liberation Mono for Courier, as the browser does; the
+line heights are measured the same.
+
+What the original does, and the port keeps: while the second letter of
+the first sentence is the next one, each update starts a new tween of the
+alpha of the tutorial (`if (this.level == 1 && this.i == 1)`), so a few of
+them run at once, the last one winning.

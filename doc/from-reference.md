@@ -65,3 +65,16 @@ the indexes, and the units change everywhere.
   `touching.down`, which the port now has in `lib/physics.atm`.
 - Her particles have their own random speeds; here they are those of the
   emitter, from `game.rnd`, so that they are the same as the original's.
+
+## 8. Save the City
+
+- The student's version has a task per letter as well (`letter.atm`), and
+  the bomb as a task; the end screen is a separate task (`End(score)`).
+  The port keeps the letter as a task, and the end as the rest of `Play`,
+  after the loop of the update, as the original does it in the same state.
+- Her delays are `await (delay * 1ms)` and then `Motion.linear`; here, the
+  delay is part of the tween (`Motion(..., delay)`), since Phaser counts the
+  tween from `now + delay` and an `await` starts it a frame later.
+- Her letters fly with `Motion.linear` to the bomb; the original's fly with
+  a tween of `length * 3` ms, where `length` is the distance to the bottom
+  of the screen, which the port keeps.
