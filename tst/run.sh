@@ -24,4 +24,13 @@ else
     fail hello
 fi
 
+# the engine: random, images, text (run from the root, as the games)
+tools/atmos.sh tst/env/engine.atm "$OUT/engine" || fail "engine (build)"
+RL_FRAMES=2 RL_SHOT=1:"$OUT/engine.png" "$OUT/engine" 2>/dev/null > "$OUT/engine.out"
+if diff -u tst/env/engine.out "$OUT/engine.out" && cmp -s tst/env/engine.png "$OUT/engine.png"; then
+    ok engine
+else
+    fail engine
+fi
+
 exit $FAIL
