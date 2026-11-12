@@ -74,3 +74,88 @@ that is checked, and what differs, game by game.
 - **Text.** The originals ask for Arial, which the browser of the container
   draws with Liberation Sans (`fc-match Arial`). The port draws the same
   font, copied in `lib/fonts/` with its license (SIL OFL 1.1).
+- **Fonts, sizes.** raylib scales a TTF so that ascent plus descent is the
+  size; the browser, so that the em is. For Liberation Sans the font is
+  loaded at `size * 2288/2048`. The line height of a text is measured as
+  Chromium measures it for Pixi (ascent, descent, and gap, each rounded:
+  the same for 18 sizes from 10 to 80 px). The browser draws a line about
+  `0.12 * size` higher than raylib: measured 4 px at 30 px and 2 px at
+  20 px in Run!; with the correction, the rows of the text are the same.
+
+## How the port follows a frame of Phaser 1.1.3
+
+`lib/game.atm` emits, in each frame, what `Game.update` of Phaser 1.1.3
+does, in its order (read from `ext/phaser/1.1.3/src/core/Game.js`):
+
+1. the time event: `tweens.update` (the tasks of `Motion`);
+2. `:pre`: `world.update`: each sprite updates its animation and tests if
+   it left the world; then each body takes the position of its sprite and
+   moves (`physics_pre`);
+3. `:update`: `state.update`;
+4. `:overlap`: the end of `state.update`, where the games test overlaps;
+5. `world.postUpdate`: the sprites follow their bodies (`physics_post`);
+6. the render, whose positions the next preUpdate reads (`physics_draw`).
+
+What Phaser 1.1.3 does there, and the port copies:
+
+- **Tweens start late.** `TweenManager` adds a new tween after its pass
+  over the tweens. A tween started in an update (frame k) first moves in
+  frame k+2; started in a create, in frame 2; started by another one that
+  ends, in the next frame. `Motion` waits for the next `:rl.frame` before
+  it moves.
+- **Bodies are one frame behind their sprites.** A body takes the position
+  of its sprite from the world transform of Pixi, which the render of the
+  last frame computed, and which is a `Float32Array`. A sprite moved by a
+  tween collides where it was drawn in the last frame; the position is
+  rounded to a 32-bit float.
+- **Bodies of rotated sprites are not of the size of their frame.**
+  `Sprite.updateCache` takes the scale from that transform,
+  `sqrt(a00^2 + a01^2)`, which is not exactly 1 when the sprite is rotated
+  (32.0000007 for a frame 32 wide), and `Body.updateBounds` sizes the body
+  with it. Without this, a hit in Run! came one frame late.
+- **Out of the world.** `outOfBoundsKill` tests the bounds of the sprite
+  (its frame, rotated, from the same transform) against the world, with
+  `Rectangle.intersects`, which is strict. `phs_bounds` repeats the
+  arithmetic of `Sprite.updateBounds` and `getLocalPosition`.
+- **Overlap.** `physics.overlap` goes through a quadtree, which never loses
+  a pair (a body over two quadrants is tested against all of them), so it
+  is the test of the boxes of the live bodies, as `Rectangle.intersects`.
+  A body enters the quadtree in its preUpdate: a sprite reset in an update
+  collides from the next frame on.
+- **States start at once.** `state.start` in 1.1.3 runs the `create` of the
+  next state inside the call: Over starts in the frame of the hit, inside
+  the update of Play, and its clock (800 ms) starts there.
+- **New keys in each state.** `createCursorKeys` makes new `Key` objects,
+  which are up until a new `keydown`. A key held from Over into Play is up
+  in Play until it is pressed again. In a browser, the repeat of the
+  keyboard sends new `keydown` events after about half a second; the
+  harness sends none. `Cursor()` in the port counts only the keys pressed
+  after it was made.
+- **Speed.** A body moves by `velocity * physicsElapsed`, where
+  `physicsElapsed` is the time between two frames, in seconds, from the
+  clock of Phaser (0 in frame 1).
+
+## 1. Run!
+
+The same as the original on its three runs, line by line (`tst/run/`):
+
+| Run | Frames | Seed | Input | Games |
+|-----|-------:|-----:|-------|------:|
+| `play` | 900 | 7 | the four arrows, a hit, UP before 800 ms (ignored), UP after, a second and a third game | 3 |
+| `idle` | 600 | 1 | none | 1 |
+| `random` | 2400 | 5 | arrows pressed at random (Python's generator, seed 11) | 8 |
+
+Trace: frame, state, score; in Play, the player (x, y), and the enemies
+alive: their number, and the sums of their x and of their y.
+
+The screens of `play` (frames 1, 60, 300, 464, 600, 700), side by side
+(`tools/compare.sh run play`): the sprites are at the same pixels; the
+rows of the text are the same; the glyphs are drawn by another rasterizer.
+
+What is not compared:
+
+- The order in which the enemies are drawn: Phaser draws the group of the
+  first kind, then the other, each in the order of its slots, which are
+  recycled; the port draws them in the order of its pool. It shows only
+  where two enemies cross.
+- The sound (no device in the container).
