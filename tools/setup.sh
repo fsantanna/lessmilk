@@ -31,7 +31,7 @@ clone () {  # <repo> <dir> [rev]
 
 clone leokaplan/lessmilk             originals $ORIGINALS_REV
 clone jessicacoliveira/atmos-lessmilk student   $STUDENT_REV
-clone fsantanna/ceu-atmos            ceu-atmos
+clone ia-atmos/lang            ceu-atmos
 
 make -s -C ext/ceu-atmos >/dev/null
 

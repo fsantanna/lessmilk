@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Counts the lines of code (not blank, not only comments) and the tokens of
-# JavaScript and Atmos files, from tools/count.py of fsantanna/raylib:
+# JavaScript and Atmos files, from tools/count.py of ia-atmos/env-ray:
 #
 #   tools/count.py <files>...     prints: lines tokens
 #

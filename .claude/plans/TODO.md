@@ -1,7 +1,7 @@
 # TODO
 
 Everything that is pending in the session that ports the Lessmilk games
-(`fsantanna/lessmilk`): asked and not decided, reported and not
+(`ia-atmos/ray-lessmilk`): asked and not decided, reported and not
 acknowledged, or known and not done. Keep it current: remove an item when
 it is settled, add one whenever something is left open, in the same commit
 when possible.
@@ -17,7 +17,6 @@ Each has the option recommended by this session.
 
 | # | Decision | Recommended |
 |---|----------|-------------|
-| 1 | Point the checkout and the documents to `ia-atmos/lang` (the compiler moved; the old address redirects). The author may also rename the repositories of the organization (this one to `raylib-lessmilk`, and the binding of raylib to a repository of its own) | Wait, and rename everything once, after the organization is renamed. If the binding gets its own repository, drop the patched copy in `env/` and use it at a fixed commit |
 | 2 | `tiles.png` of Dark Blue (game 10) exists in no copy found (the site, the student's port, GitHub). The logic only needs the indices of the tiles | Draw the tiles as plain squares of the colors of the game, from the levels (`levels/*.json`), and say so in `doc/fidelity.md`; compare the screens by eye |
 | 3 | `levels/map.json` of The Three Hearts (game 11) exists in no copy found; without it the original does not get past its menu | Rebuild it from the student's `the_three_hearts/map.atm` (tiles and objects), put it next to the original in `ext/` only (not in `assets/`, since it is not Thomas Palef's), and compare the port with that |
 | 4 | The harness sends no key repeat: a key held from one state into the next stays up in Phaser until pressed again; in a browser the keyboard would send it again after about half a second | Keep it so (deterministic, and the same in the port, `Cursor`/`key_down`); it is written in `doc/fidelity.md` |
@@ -35,7 +34,7 @@ Each has the option recommended by this session.
 | 7 | L7: the case study in `doc/`, a pattern per section, from the shortest game that shows it |
 | 8 | `doc/games/` for Pixel War, Man vs Penguins, Connected, and I Hate Rabbits (the other documents of these games are done) |
 | 9 | `doc/table.md` and `doc/state.md`: the row and the section of Connected (control variables not counted yet) |
-| 10 | Copy `raylib.atm` at `0b1aa0f` of `fsantanna/raylib`, and use `rl.font_ex` in `lib/engine.atm` in place of its own C for fonts |
+| 10 | Copy `raylib.atm` at `0b1aa0f` of `ia-atmos/env-ray`, and use `rl.font_ex` in `lib/engine.atm` in place of its own C for fonts |
 | 11 | Run `ASAN=1 tst/run.sh` on the last commits (stopped once for time; the normal suite passes, 22 tests). The suite takes more than 10 minutes with ASAN: run it in the background |
 | 12 | Box Jump: no run reaches the screen End (twenty levels); a run that wins would need a schedule of jumps found by search |
 | 13 | Consider `await(n, :e)` of the compiler (the nth occurrence of a pattern) where a port counts frames |
@@ -61,6 +60,12 @@ None.
 
 ## Settled
 
+- The names (A1): the author renamed the repositories of the organization;
+  the documents and scripts now say `ia-atmos/lang` (the compiler),
+  `ia-atmos/env-ray` (the binding of raylib, still copied in `env/` at a
+  fixed commit, with its patch), and `ia-atmos/ray-lessmilk` (this one).
+  The local checkouts in `ext/` and the remote of this repository keep the
+  old addresses, which redirect.
 - The library: raylib, through `raylib.atm` (the author, through the
   session `ceu-atmos`).
 - The assets: copied into `assets/`, with credit to Thomas Palef (the

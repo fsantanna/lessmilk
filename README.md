@@ -3,7 +3,7 @@
 A port of the twelve games of Thomas Palef's challenge "12 games in 12 weeks"
 ([lessmilk.com][lessmilk], 2014, JavaScript over Phaser 1.1.3) to
 [Atmos][atmos], over [raylib][raylib], through the environment `raylib.atm` of
-[fsantanna/raylib][rlatm].
+[ia-atmos/env-ray][rlatm].
 
 The goal is a study: every state of Phaser, every tween chained by callbacks,
 every comparison with the clock in `update`, and every flag becomes a task, an
@@ -11,9 +11,9 @@ every comparison with the clock in `update`, and every flag becomes a task, an
 same frames, with the same seed and the same input.
 
 [lessmilk]: http://www.lessmilk.com/12games
-[atmos]:    https://github.com/fsantanna/ceu-atmos
+[atmos]:    https://github.com/ia-atmos/lang
 [raylib]:   https://github.com/raysan5/raylib
-[rlatm]:    https://github.com/fsantanna/raylib
+[rlatm]:    https://github.com/ia-atmos/env-ray
 
 ## Credits
 

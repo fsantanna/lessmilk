@@ -1,6 +1,6 @@
 # The compiler
 
-What this port found in the compiler `fsantanna/ceu-atmos` (branch `main`,
+What this port found in the compiler `ia-atmos/lang` (branch `main`,
 from `9ec67ec`; the port now builds with `c467e60`), reported to the session
 that maintains it, and what became of each. Nothing here blocked the port.
 

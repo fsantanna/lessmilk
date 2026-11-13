@@ -31,7 +31,7 @@ that is checked, and what differs, game by game.
   which each frame starts (`__ranIn`). Counting from the state seen after a
   frame made Box Jump start one frame off in some runs.
 - A run is a file with `FRAMES`, `SEED`, `INPUT`, and `SHOTS`, in the
-  format of the raylib port (`fsantanna/raylib`), so the same file drives
+  format of the raylib port (`ia-atmos/env-ray`), so the same file drives
   the original and the port: `INPUT=f:op,...` applies `op` before frame
   `f`: `dn:KEY` and `up:KEY` (names as raylib: `UP`, `SPACE`, `A`...),
   `mv:X:Y` (mouse, in pixels of the game), `md:B` and `mu:B` (buttons).

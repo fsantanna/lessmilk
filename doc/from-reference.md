@@ -2,7 +2,7 @@
 
 The student's port (`jessicacoliveira/atmos-lessmilk@3e24458`) is written
 in the reference Atmos 0.8 over `pico-sdl` 0.7; this port, in the compiler
-`fsantanna/ceu-atmos` over raylib. This is what changed in practice, game
+`ia-atmos/lang` over raylib. This is what changed in practice, game
 by game. The task structure carries over almost as it is; the libraries,
 the indexes, and the units change everywhere.
 
