@@ -28,5 +28,6 @@
 | 2 | Pixel War | 1.1.3 | 198 | 238 | +20 | 2188 | 1544 | -29 | 5 | 1 | 2 (6000 frames, 9 games) | yes |
 | 3 | Box Jump | 1.1.3 | 185 | 207 | +12 | 2746 | 2275 | -17 | 3 | 2 | 2 (5400 frames, levels 1 to 4, 56 deaths) | yes |
 | 4 | Man vs Penguins | 1.1.3 | 308 | 306 | -1 | 3566 | 2497 | -30 | 6 | 3 | 2 (8400 frames, many deaths) | yes |
+| 7 | Connected | 1.1.3 | 334 | 357 | +7 | 3386 | 2630 | -22 | not counted | not counted | 2 (13033 frames, 3 games) | yes |
 | 8 | Save the City | 1.1.3 | 176 | 195 | +11 | 1896 | 1557 | -18 | 2 | 1 | 2 (2162 frames, 2 cities gone, a restart) | yes |
 | 9 | I Hate Rabbits | 1.1.3 | 252 | 244 | -3 | 3161 | 2241 | -29 | 3 | 1 | 2 (9200 frames, 5 games) | yes |
