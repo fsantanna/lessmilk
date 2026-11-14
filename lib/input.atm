@@ -1,0 +1,69 @@
+;; Input: the input of Phaser 1.1.3 for sprites (InputHandler, Pointer):
+;; a sprite with `input_enable` receives the mouse.
+;;
+;;      input_enable(box)
+;;      loop e on :input.up { if e.s == box { ... } }   ;; onInputUp
+;;
+;; As in Phaser, in the events of the mouse, between frames:
+;;   - a press (Pointer.start, after Pointer.move) goes to one sprite: of the
+;;     sprites under the pointer, in the order they were enabled, the one
+;;     with the highest renderOrderID (the latest in the display list);
+;;     `:input.down [s]`
+;;   - a release goes to every sprite that was pressed, if the pointer is
+;;     still over it: `:input.up [s]`
+;; The pointer is over a sprite if it is in its frame, unscaled, in the
+;; transform drawn in the last frame (getLocalUnmodifiedPosition).
+
+val Inputs = [ items = [] ]
+
+func input_enable (s) {
+    set s.input = [ down = false ]
+    set Inputs.items@+ = s
+}
+
+func input_disable_all () {
+    set Inputs.items = []
+}
+
+;; InputHandler.checkPointerOver
+func input_over (s, px, py) {
+    if s.visible == false {
+        return false
+    }
+    val lx, ly = sprite_local(s, px, py)
+    (lx >= 0) && (lx <= s.img.fw) && (ly >= 0) && (ly <= s.img.fh)
+}
+
+task Input_run () {
+    spawn {
+        loop e on :rl.mouse.dn {
+            if e.button == 0 {
+                ;; Pointer.move: the sprite on top under the pointer
+                var top, prio, ord = (nil, -1, -1)
+                loop _, s in Inputs.items {
+                    if ((0 > prio) || ((s.render_order || -1) > ord)) && input_over(s, e.x, e.y) {
+                        set top, prio, ord = (s, 0, s.render_order || -1)
+                    }
+                }
+                ;; Pointer.start: _touchedHandler of that sprite
+                if top && !top.input.down {
+                    set top.input.down = true
+                    emit @:global :input.down [s=top]
+                }
+            }
+        }
+    }
+    loop e on :rl.mouse.up {
+        if e.button == 0 {
+            ;; Pointer.stop: _releasedHandler of every sprite
+            loop _, s in Inputs.items {
+                if s.input.down {
+                    set s.input.down = false
+                    if input_over(s, e.x, e.y) {
+                        emit @:global :input.up [s=s]
+                    }
+                }
+            }
+        }
+    }
+}

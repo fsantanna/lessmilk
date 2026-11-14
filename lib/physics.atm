@@ -65,6 +65,22 @@ static void phs_corners (double x, double y, double rot, double sx, double sy,
     }
 }
 
+// Sprite.getLocalUnmodifiedPosition: the point (px,py) of the screen in
+// the frame of the sprite, unscaled, as InputHandler.checkPointerOver uses
+// it, from the transform drawn (32-bit floats). Out: x y.
+static void phs_local (double x, double y, double rot, double sx, double sy,
+                       double fw, double fh, double ax, double ay,
+                       double px, double py, double* out) {
+    double sr = sin(rot), cr = cos(rot);
+    float l0 = (float)(cr * sx), l1 = (float)(-sr * sy);
+    float l3 = (float)(sr * sx), l4 = (float)(cr * sy);
+    double a00 = l0, a11 = l4, i01 = l1, i10 = l3;
+    double a02 = (float)x, a12 = (float)y;
+    double idi = 1 / (a00 * a11 + i01 * -i10);
+    out[0] = a11*idi*px + -i01*idi*py + (a12*i01 - a02*a11)*idi + ax*fw;
+    out[1] = a00*idi*py + -i10*idi*px + (-a12*a00 + a02*i10)*idi + ay*fh;
+}
+
 // The bounds of a sprite, as Phaser 1.1.3 computes them in
 // Sprite.updateCache and Sprite.updateBounds, from the world transform of
 // Pixi, which is a Float32Array: x y of the last frame drawn, its angle in
@@ -278,8 +294,17 @@ func update_motion (b) {
 ;; quadtree of the frame, with the bodies that may collide
 func physics_pre () {
     qt_clear()
+    var order = 0
     loop _, b in Physics.bodies {
         val s = b.spr
+        ;; renderOrderID: the order of the sprites updated in this frame
+        ifs {
+            s.exists == false => set s.render_order = -1
+            s.visible != false => {
+                set s.render_order = order
+                set order += 1
+            }
+        }
         if (s.exists != false) && s.oob_kill {
             ;; Sprite.updateBounds: outOfBoundsKill, from the bounds drawn,
             ;; when the sprite was in the world and is not anymore
@@ -288,6 +313,15 @@ func physics_pre () {
             set s.in_world = now_in
             if was_in && !now_in {
                 sprite_kill(s)
+            }
+        }
+        if (s.exists != false) && s.oob_signal {
+            ;; events.onOutOfBounds, with no kill
+            val now_in = in_world(s)
+            val was_in = s.in_world != false
+            set s.in_world = now_in
+            if was_in && !now_in {
+                set s.left_world = true
             }
         }
         if s.exists != false {
@@ -682,4 +716,12 @@ func group_first_not_alive (g) {
         }
     }
     nil
+}
+
+;; the point (x, y) of the screen in the frame of the sprite, unscaled
+func sprite_local (s, px, py) {
+    val dx, dy, r, sx, sy, fw, fh, ax, ay = (s.dx, s.dy, s.drot, s.dsx, s.dsy, s.img.fw, s.img.fh, s.ax, s.ay)
+    val lx = `:number.float ({ double o[2]; phs_local(a_dbl($dx), a_dbl($dy), a_dbl($r), a_dbl($sx), a_dbl($sy), a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), a_dbl($px), a_dbl($py), o); o[0]; })`
+    val ly = `:number.float ({ double o[2]; phs_local(a_dbl($dx), a_dbl($dy), a_dbl($r), a_dbl($sx), a_dbl($sy), a_dbl($fw), a_dbl($fh), a_dbl($ax), a_dbl($ay), a_dbl($px), a_dbl($py), o); o[1]; })`
+    (lx, ly)
 }
