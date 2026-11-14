@@ -9,7 +9,7 @@ when possible.
 The numbers do not change. Numbers that are missing were settled (see the
 end).
 
-Last update: 2026-11-13.
+Last update: 2026-11-14.
 
 ## A. Decisions waiting for an answer
 
@@ -38,6 +38,7 @@ Each has the option recommended by this session.
 | 11 | Run `ASAN=1 tst/run.sh` on the last commits (stopped once for time; the normal suite passes, 22 tests). The suite takes more than 10 minutes with ASAN: run it in the background |
 | 12 | Box Jump: no run reaches the screen End (twenty levels); a run that wins would need a schedule of jumps found by search |
 | 13 | Consider `await(n, :e)` of the compiler (the nth occurrence of a pattern) where a port counts frames |
+| 15 | After the twelve games are identical to their originals: tag the last exact commit `exact`, then relax each port in favor of expressiveness, keeping the intent of the original (decided by the author, see Settled): `await Nms` in place of `Wait`, a task per entity in place of recycled slots, `await`s in place of the flags that stayed, the emulation of 32-bit floats and of the quadtree out of the games (kept in `lib/` for the exact version); the relaxed ports get traces of their own |
 | 14 | Connected: try the move as a sequence (`await` of the press, then the updates while pressed, then `await Wait(300)`), in place of the flags `clicked` and `next_time`, keeping the traces |
 
 ## C. Reported or decided, and not acknowledged by the author
@@ -59,6 +60,14 @@ Each has the option recommended by this session.
 None.
 
 ## Settled
+
+- Expressiveness over exactness (the author, 2026-11-14): once a port is
+  identical to its original, it may relax the constraints of exactness in
+  favor of expressiveness, as long as the intent of the original author is
+  kept. Order: the five games left are done exact first; then the tag
+  `exact` on `main`, and the relaxed ports on top of it, so that the study
+  compares the original, the exact port, and the expressive port. Passed
+  to the session `ceu-atmos` for the other ports.
 
 - The names (A1): the author renamed the repositories of the organization;
   the documents and scripts now say `ia-atmos/lang` (the compiler),
