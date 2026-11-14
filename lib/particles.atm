@@ -15,9 +15,20 @@
 ;; updated, so a new particle first moves and ages in the next frame. Speeds
 ;; and rotations are drawn from game.rnd.
 
+;; With a vector of images (makeParticles of several keys), the image of each
+;; of the `max` particles is drawn from game.rnd when the emitter is made, as
+;; Phaser does; a particle takes the first slot that is free, and its image.
 func Emitter (img, max) {
+    val many = (img ?? :table) && !(img ?? :Image)
+    val keys = []
+    if many {
+        loop _ in max {
+            set keys@+ = img@(eng.rnd_integer_in_range(0, #img))      ;; rnd.pick
+        }
+    }
     :Emitter [
-        img = img, max = max,
+        img = img, max = max, keys = if many => keys => nil,
+        busy = [],                          ;; the slots in use
         x = 0, y = 0,                       ;; emitX, emitY
         min_vx = -100, max_vx = 100,        ;; minParticleSpeed, maxParticleSpeed
         min_vy = -100, max_vy = 100,
@@ -49,7 +60,16 @@ func emitter_start (e, explode, lifespan, frequency, quantity) {
 ;; a particle: Emitter.emitParticle, then Sprite.preUpdate until its
 ;; lifespan is over
 task Particle (e) {
-    val s = Sprite(e.img, e.x, e.y)
+    var slot = 0
+    loop {
+        while e.busy@(slot)
+        set slot += 1
+    }
+    set e.busy@(slot) = true
+    defer {
+        set e.busy@(slot) = false
+    }
+    val s = Sprite(if e.keys => e.keys@(slot) => e.img, e.x, e.y)
     set s.ax, s.ay = (0.5, 0.5)
     set pub = s
     set e.sprites@+ = s

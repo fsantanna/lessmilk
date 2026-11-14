@@ -1,0 +1,81 @@
+;; Menu: a box in the middle; a click on one of its sides pushes it; when it
+;; leaves the world, the game starts.
+
+val IMG_WALL   = eng.image(A ++ "images/wall.png")
+val IMG_BOX    = eng.image(A ++ "images/box.png")
+val IMG_HOLE   = eng.image(A ++ "images/hole.png")
+val IMG_ARROWS = eng.image(A ++ "images/arrows.png")
+
+;; in_triangle and sign of the original
+func sign (p, a, b) {
+    ((p@0 - b@0) * (a@1 - b@1)) - ((a@0 - b@0) * (p@1 - b@1))
+}
+func in_triangle (p, a, b, c) {
+    val b1 = sign(p, a, b) < 0
+    val b2 = sign(p, b, c) < 0
+    val b3 = sign(p, c, a) < 0
+    (b1 == b2) && (b2 == b3)
+}
+
+;; box_clicked: the side of the box under the pointer (its triangle, from the
+;; corners of the box as drawn) gives the direction
+func push_box (s, b, px, py) {
+    val k = sprite_corners(s)
+    val tl, tr, bl, br = ([k@0, k@1], [k@2, k@3], [k@4, k@5], [k@6, k@7])
+    val p, c = ([px, py], [s.x, s.y])
+    val speed = 300
+    ifs {
+        in_triangle(p, tl, tr, c) => set b.vy = -speed
+        in_triangle(p, bl, br, c) => set b.vy = speed
+        in_triangle(p, bl, tl, c) => set b.vx = -speed
+        else => set b.vx = speed
+    }
+}
+
+;; a pulse of a scale, for ever: .to(big).to(1).loop()
+task Pulse (o, big, ms) {
+    loop {
+        await Motion(o, [sx=big, sy=big], ms)
+        await Motion(o, [sx=1, sy=1], ms)
+    }
+}
+
+task Menu () {
+    input_reset()
+    val title = Text((W/2) + 0.5, 50, "Fill the Holes", 50)
+    val expl = Text((W/2) + 0.5, (H - 30) + 0.5, "click on the box above to start", 20, 0.5)
+    loop _, t in [title, expl] {
+        set t.ax, t.ay = (0.5, 0.5)
+    }
+    val arrows = Sprite(IMG_ARROWS, W/2, H/2)
+    set arrows.ax, arrows.ay = (0.5, 0.5)
+    spawn Pulse(arrows, 1.2, 1000)
+    val box = Sprite(IMG_BOX, W/2, H/2)
+    val body = Body(box, :box)
+    input_enable(box)
+    set box.ax, box.ay = (0.5, 0.5)
+    set box.oob_signal = true
+    defer {
+        body_remove(body)
+        input_disable_all()
+    }
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            text_draw(title)
+            text_draw(expl)
+            sprite_draw(arrows)
+            sprite_draw(box)
+        }
+    }
+    spawn {
+        loop e on :input.up {
+            if e.s == box {
+                spawn Motion(arrows, [alpha=0], 400)
+                push_box(box, body, rl.mouse_x(), rl.mouse_y())
+            }
+        }
+    }
+    ;; events.onOutOfBounds: the game starts there, in world.update
+    await :particles until box.left_world
+}

@@ -1,0 +1,222 @@
+;; Play: the levels: holes, boxes, and walls from groups of 10, recycled.
+
+val SND_HIT  = eng.sound(A ++ "sounds/hit.wav")
+val SND_NEXT = eng.sound(A ++ "sounds/next.wav")
+val SND_MUSIC = eng.sound(A ++ "sounds/music.wav")
+
+;; remove_from_board: a tween of nothing (alpha to 1) then out to the left
+task Remove (o) {
+    await Motion(o, [alpha=1], 500)
+    await Motion(o, [x="-500"], 500, Ease.quad_in)
+}
+
+task Play () {
+    input_reset()
+    val holes = Group(IMG_HOLE, 10, :hole)
+    val boxes = Group(IMG_BOX, 10, :box)
+    val walls = Group(IMG_WALL, 10, :wall)
+    loop _, x in boxes.slots {
+        set x.s.oob_kill = true
+        input_enable(x.s)
+        set x.s.listeners = 0           ;; onInputUp.add of box_clicked
+    }
+    loop _, x in walls.slots {
+        set x.b.immovable = true
+    }
+    val reset_button = Sprite(IMG_WALL, W - 80, 0)
+    val rbody = Body(reset_button, :button)
+    set reset_button.alpha = 0
+    set reset_button.sx, reset_button.sy = (1.5, 0.8)
+    input_enable(reset_button)
+    defer {
+        group_remove(holes)
+        group_remove(boxes)
+        group_remove(walls)
+        body_remove(rbody)
+        input_disable_all()
+    }
+    val title = Text(10, 10, "Fill the Holes", 20)
+    val level_label = Text(W/2, 10, "1/" ++ tostring(#MAP), 20)
+    set level_label.ax = 0.5
+    val restart_label = Text(W - 70, 10, "restart", 20)
+    val expl = Text(W/2, H - 35, "", 20)
+    set expl.ax = 0.5
+    set expl.sx, expl.sy = (1, 1)
+    eng.play(SND_MUSIC, 0.15)
+    var holes_to_fill, level, timer_end = (0, 0, 0)
+    pin tweens = tasks()
+
+    ;; [trace]
+    set Fill.play = [ boxes=boxes, walls=walls, holes=holes, expl=expl,
+                      level=\{ level }, holes_to_fill=\{ holes_to_fill }, timer=\{ timer_end } ]
+    ;; [/trace]
+
+    spawn {
+        loop on :rl.draw {
+            rl.clear(BG)
+            group_draw(holes)
+            group_draw(boxes)
+            group_draw(walls)
+            sprite_draw(reset_button)
+            text_draw(title)
+            text_draw(level_label)
+            text_draw(restart_label)
+            text_draw(expl)
+        }
+    }
+
+    val func add_tile (x, y, kind) {
+        val t = ifs {
+            kind == 1 => {
+                set holes_to_fill += 1
+                group_first_dead(holes)
+            }
+            kind == 2 => {
+                val b = group_first_dead(boxes)
+                set b.s.sx, b.s.sy = (1, 1)
+                set b.s.listeners = 1   ;; Signal.add ignores a listener added again
+                b
+            }
+            else => group_first_dead(walls)
+        }
+        set t.s.sx, t.s.sy = (1, 1)
+        set t.s.ax, t.s.ay = (0.5, 0.5)
+        sprite_reset(t.s, t.b, x + (IMG_BOX.fw / 2), y + (IMG_BOX.fh / 2))
+        set t.s.sx, t.s.sy = (0.1, 0.1)
+        spawn @tweens Motion(t.s, [sx=1, sy=1], 1000, Ease.bounce_out)
+    }
+
+    val func draw_level () {
+        eng.play(SND_NEXT, 0.1)
+        loop i, row in MAP@(level) {
+            loop j, k in row {
+                if k != 0 {
+                    add_tile((j * TILE) + OX, (i * TILE) + OY, k)
+                }
+            }
+        }
+        set expl.x, expl.y = (W/2, H - 35)
+        set expl.s = TEXT@(level)
+        set expl.sx, expl.sy = (0.1, 0.1)
+        spawn @tweens Motion(expl, [sx=1, sy=1], 1000, Ease.bounce_out)
+    }
+
+    val func clear_level () {
+        loop _, g in [boxes, walls, holes] {
+            loop _, x in g.slots {
+                sprite_kill(x.s)
+            }
+        }
+        set holes_to_fill = 0
+    }
+
+    ;; box_clicked, once per listener added to the box
+    spawn {
+        loop e on :input.up {
+            loop _, x in boxes.slots {
+                if e.s == x.s {
+                    loop _ in x.s.listeners {
+                        set user_clicks += 1
+                        if x.s.alive && (x.b.vx == 0) && (x.b.vy == 0) {
+                            push_box(x.s, x.b, rl.mouse_x(), rl.mouse_y())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ;; reset_level, on onInputDown of the button
+    spawn {
+        loop e on :input.down {
+            if e.s == reset_button {
+                set user_clicks += 1
+                clear_level()
+                draw_level()
+            }
+        }
+    }
+
+    draw_level()
+
+    loop on :update {
+        ;; collide(boxes, walls)
+        var hit = false
+        loop _, x in boxes.slots {
+            if x.s.exists {
+                if collide_group(x.b, :wall) {
+                    set hit = true
+                }
+            }
+        }
+        if hit {
+            eng.play(SND_HIT, 0.3)
+        }
+        ;; overlap(boxes, holes): collide_box_hole
+        loop _, x in boxes.slots {
+            if x.s.exists {
+                loop _, hb in overlap_list(x.b, :hole) {
+                    val box, hole = (x.s, hb.spr)
+                    if box.alive && hole.alive &&
+                       (box.x > (hole.x - 15)) && (box.x < (hole.x + 15)) &&
+                       (box.y > (hole.y - 15)) && (box.y < (hole.y + 15))
+                    {
+                        set x.b.vx, x.b.vy = (0, 0)
+                        sprite_reset(box, x.b, hole.x, hole.y)
+                        set holes_to_fill -= 1
+                        set box.alive = false
+                        set hole.alive = false
+                        eng.play(SND_HIT, 0.3)
+                        spawn @tweens Motion(box, [sx=0.8, sy=0.8], 300)
+                    }
+                }
+            }
+        }
+        if holes_to_fill == 0 {
+            set holes_to_fill = 42
+            set timer_end = eng.now() + 1200
+            ;; clear_level2
+            loop _, g in [boxes, walls, holes] {
+                loop _, x in g.slots {
+                    spawn @tweens Remove(x.s)
+                }
+            }
+            spawn @tweens Remove(expl)
+        }
+        if (timer_end != 0) && (timer_end < eng.now()) {
+            set timer_end = 0
+            ;; next_level
+            clear_level()
+            set level += 1
+            until level == #MAP
+            set level_label.s = tostring(level + 1) ++ "/" ++ tostring(#MAP)
+            draw_level()
+        }
+    }
+}
+
+;; [trace]
+;; the line of the trace: as tools/original/trace/5.js
+func trace () {
+    val f = rl.frame()
+    if screen != "Play" {
+        return tostring(f) ++ " " ++ screen ++ " " ++ tostring(user_clicks)
+    }
+    val p = Fill.play
+    var n, a, sx, sy, sv = (0, 0, 0, 0, 0)
+    loop _, x in p.boxes.slots {
+        if x.s.exists {
+            set n += 1
+            set sx += x.s.x
+            set sy += x.s.y
+            set sv += x.b.vx + (2 * x.b.vy)
+            if x.s.alive { set a += 1 }
+        }
+    }
+    tostring(f) ++ " Play " ++ tostring(user_clicks) ++ " " ++ tostring(p.level()) ++ " " ++
+        tostring(p.holes_to_fill()) ++ " " ++ (if p.timer() != 0 => "1" => "0") ++ " " ++
+        tostring(n) ++ " " ++ tostring(a) ++ " " ++ eng.fixed(sx, 2) ++ " " ++ eng.fixed(sy, 2) ++ " " ++
+        eng.tostring(sv) ++ " " ++ tostring(#group_living(p.walls)) ++ " " ++
+        tostring(#group_living(p.holes)) ++ " " ++ eng.fixed(p.expl.x, 2)
+}
+;; [/trace]

@@ -93,6 +93,24 @@ the coin in the same update, and a loop with `await Wait` in another task
 would draw it before (the tasks of `Play` awake before its body). `half`
 alternates between two places that call `newEnemy`.
 
+## 5. Fill the Holes
+
+| JavaScript | Kind | Port |
+|------------|------|------|
+| `map`, `text`, `w`, `h`, `tile_size`, `offset` | constant | `MAP`, `TEXT` (`levels.atm`), `W`, `H`, `TILE`, `OX`, `OY` |
+| `user_clicks` (global) | data, shown in End | a global of the port too |
+| `this.level` (Play) | data | a local of `Play` |
+| `this.holes_to_fill` (Play) | data and control: 0 ends the level, then 42 so that it ends once | `holes_to_fill`, the same |
+| `this.timer_end_level` (Play) | control: the next level 1200 ms after the end | `timer_end`, the same comparison in the update |
+| `this.hand` (Play) | the cursor of the browser | gone (raylib has no hand cursor here) |
+| `this.holes`, `this.boxes`, `this.walls` (groups of 10) | recycled sprites | `Group` |
+| the box of the menu, `onOutOfBounds` | control: the game starts when the box leaves | `await :particles until box.left_world` |
+
+Control: 3 in the JavaScript (`holes_to_fill` as a gate, `timer_end_level`,
+`hand`), 2 left. The end of a level and the next one stay in the update:
+the next level is drawn in the middle of an update, and the boxes of the
+new level are tested in that same update.
+
 ## 8. Save the City
 
 | JavaScript | Kind | Port |

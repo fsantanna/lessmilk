@@ -348,6 +348,33 @@ The text that pulses (a tween of the scale of a text) is drawn larger by
 raylib, where Pixi scales the picture of the text: the same size, drawn
 differently.
 
+## 5. Fill the Holes
+
+The same as the original on its two runs, line by line
+(`tst/fill_the_holes/`):
+
+| Run | Frames | Seed | Input |
+|-----|-------:|-----:|-------|
+| `solve` | 3600 | 1 | the box of the menu; the first six levels solved; clicks at random (seed 5) on level 7, the button restart |
+| `random` | 3059 | 4 | the box of the menu; clicks at random on the board (seed 55), some quick, the button restart now and then |
+
+Trace: frame, state, clicks; in Play, the level, the holes to fill, the
+timer, the boxes that exist (how many, alive, sums of x, y, and velocity),
+the walls and holes that exist, the x of the explanation.
+
+What it took: the input of Phaser for sprites (`lib/input.atm`): a press
+goes to the sprite on top under the pointer (the highest `renderOrderID`,
+the order of the sprites updated in the last frame), a release to every
+sprite pressed, if the pointer is still over it, in the frame of the
+sprite unscaled, from the transform drawn; the side of a box clicked, from
+its corners; `onOutOfBounds` with no kill, which starts Play inside
+`world.update`, so that Play updates in the same frame; `Signal.add`, which
+does not add a listener twice (a box recycled is clicked once, not once
+per level); the emitter of End, whose particles take one of three images,
+drawn from `game.rnd` for each slot when it is made.
+
+No run gets through the fifteen levels (the screen End is not compared).
+
 ## 7. Connected
 
 The same as the original on its two runs, line by line (`tst/connected/`):
